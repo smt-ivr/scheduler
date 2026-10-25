@@ -114,6 +114,16 @@ textarea.code { font-family: var(--mono); font-size: 13px; direction: ltr; text-
 .errors { background: var(--bad-soft); color: var(--bad); border-radius: 10px; padding: 12px 14px; font-size: 13.5px; }
 .errors ul { margin: 6px 0 0; padding-inline-start: 18px; }
 .rule { border: 1px solid var(--line); border-radius: 10px; padding: 14px; background: var(--soft); margin-bottom: 12px; }
+.rule-ok { border-inline-start: 4px solid var(--ok); }
+.rule-bad { border-inline-start: 4px solid var(--bad); }
+.step { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: var(--on-accent); font-size: 13px; margin-inline-end: 8px; }
+.var-chips { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; margin-top: 6px; }
+.vchip { border: 1px dashed var(--line2); background: var(--panel); border-radius: 999px; padding: 2px 10px; font-size: 12.5px; cursor: pointer; color: var(--accent); }
+.vchip:hover { border-style: solid; border-color: var(--accent); }
+.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+.ex { text-align: start; border: 1px solid var(--line2); background: var(--panel); border-radius: 10px; padding: 14px; cursor: pointer; display: grid; gap: 4px; }
+.ex:hover { border-color: var(--accent); background: var(--accent-soft); }
+.ex span { color: var(--muted); font-size: 13px; }
 .rule-num { width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--on-accent); display: grid; place-items: center; font-weight: 700; font-size: 13px; flex: none; }
 .cond { display: flex; gap: 6px; margin-bottom: 6px; flex-wrap: wrap; }
 .cond > select, .cond > input { flex: 1 1 120px; width: auto; }
@@ -301,6 +311,43 @@ async function runNow(id, btn) {
 }
 
 // ---------- עורך משימה ----------
+// "מייל פשוט" = כלל בלי תנאים, רק לפי הצלחה/כשל
+const isSimple = (r) => (r.when === 'success' || r.when === 'failure') && !(r.if || []).length && !r.stop;
+const SIMPLE_MAIL = {
+  success: () => ({ name: 'מייל כשהצליח', when: 'success', match: 'all', if: [], stop: false,
+    email: { to: [], cc: [], subject: 'המשימה "{{task}}" הצליחה', body: 'שלום,\n\nהמשימה "{{task}}" הסתיימה בהצלחה.\nתאריך: {{hebrew_date}} ({{date}}) בשעה {{time}}', html: false } }),
+  failure: () => ({ name: 'מייל כשנכשל', when: 'failure', match: 'all', if: [], stop: false,
+    email: { to: [], cc: [], subject: 'המשימה "{{task}}" נכשלה', body: 'שלום,\n\nהמשימה "{{task}}" לא הצליחה.\nסיבה: {{error}}\nתאריך: {{hebrew_date}} ({{date}}) בשעה {{time}}\n\nתחילת התשובה:\n{{response}}', html: false } }),
+};
+const EXAMPLES = [
+  { title: 'משימה ריקה', desc: 'מתחילים מאפס', config: null },
+  { title: 'ימות המשיח: העתקת קובץ', desc: 'בכל ראש חודש אדר מעתיק קובץ משלוחה לשלוחה, ושולח מייל אם הצליח או נכשל',
+    config: { name: 'העתקת קובץ בראש חודש אדר', enabled: true,
+      schedule: { type: 'yearly', calendar: 'hebrew', month: 'adar', day: 1, times: ['08:00'] },
+      request: { method: 'GET', url: 'https://www.call2all.co.il/ym/api/FileAction?token=0771234567:123456&action=copy&what=ivr2:1/000.wav&target=ivr2:2', headers: {}, body: '', timeout_seconds: 30, retries: 2 },
+      success: { status: '200-299', error_words: ['"success":false'], must_contain: ['"responseStatus":"OK"'] },
+      rules: [] } },
+  { title: 'בדיקה שאתר עובד', desc: 'כל 10 דקות פונה לאתר, ושולח מייל אם הוא לא עונה',
+    config: { name: 'בדיקת האתר', enabled: true,
+      schedule: { type: 'interval', minutes: 10, from: '00:00', to: '23:59', days: [0, 1, 2, 3, 4, 5, 6] },
+      request: { method: 'GET', url: 'https://www.your-site.co.il', headers: {}, body: '', timeout_seconds: 20, retries: 1 },
+      success: { status: '200-299', error_words: [], must_contain: [] }, rules: [] } },
+  { title: 'קריאה יומית ל-API עם מפתח', desc: 'בימים א׳-ה׳ בבוקר שולח בקשה עם מפתח API וגוף JSON',
+    config: { name: 'סנכרון יומי', enabled: true,
+      schedule: { type: 'daily', times: ['08:00'], days: [0, 1, 2, 3, 4] },
+      request: { method: 'POST', url: 'https://api.example.com/v1/sync', headers: { Authorization: 'Bearer YOUR_API_KEY' }, body: '{\n  "date": "{{date}}"\n}', timeout_seconds: 30, retries: 2 },
+      success: { status: '200-299', error_words: ['error'], must_contain: [] }, rules: [] } },
+  { title: 'בתאריכים מסוימים', desc: 'פונה לכתובת בתאריכים שבוחרים (גם לפי תאריך עברי)',
+    config: { name: 'משימה בתאריכים', enabled: true, schedule: { type: 'dates', dates: [] },
+      request: { method: 'GET', url: '', headers: {}, body: '', timeout_seconds: 30, retries: 2 },
+      success: { status: '200-299', error_words: [], must_contain: [] }, rules: [] } },
+];
+// לכל דוגמה (חוץ מהריקה) מוסיפים מייל הצלחה ומייל כשל
+EXAMPLES.forEach((x) => {
+  if (!x.config) { x.config = null; return; }
+  x.config.rules = x.config.rules.length ? x.config.rules : [SIMPLE_MAIL.success(), SIMPLE_MAIL.failure()];
+  x.config.rules.forEach((r) => (r.email.to = ['office@your-domain.com']));
+});
 const NEW_TASK = () => ({
   name: '', enabled: true,
   schedule: { type: 'dates', dates: [] },
@@ -404,46 +451,53 @@ async function editor(id, params) {
   function renderForm() {
     const s = cfg.schedule, r = cfg.request, sc = cfg.success;
     sc.error_words ||= []; sc.must_contain ||= [];
+    const advOpen = Object.keys(r.headers || {}).length || headerRows.length;
     $('#main').innerHTML = `<div class="stack">
       <div class="card">
-        <div class="row" style="align-items:flex-end"><div style="flex:1;min-width:200px"><label class="f">שם המשימה</label><input type="text" data-b="name" value="${esc(cfg.name)}"></div>
+        <div class="row" style="align-items:flex-end"><div style="flex:1;min-width:200px"><label class="f">שם המשימה</label><input type="text" data-b="name" value="${esc(cfg.name)}" placeholder="למשל: העתקת קובץ בראש חודש"></div>
           <label class="switch" style="margin-bottom:8px"><input type="checkbox" data-b="enabled" data-t="bool" ${cfg.enabled !== false ? 'checked' : ''}><span></span>פעילה</label></div>
       </div>
 
-      <div class="card"><h2>מתי לרוץ</h2>
+      <div class="card"><h2><span class="step">1</span>לאיזו כתובת לפנות</h2>
+        <div class="row" style="flex-wrap:nowrap">
+          <select class="w-auto ltr" data-b="request.method" data-rerender>${opt(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map((x) => [x, x]), r.method)}</select>
+          <input type="text" class="ltr mono" data-b="request.url" value="${esc(r.url)}" placeholder="https://api.example.com/...?token=..."></div>
+        <div class="help">את הכתובת המלאה, כולל הפרמטרים והמפתח, מעתיקים מהתיעוד של השירות. ברוב השירותים (כמו ימות המשיח) מספיק GET.</div>
+        ${r.method === 'GET' ? '' : `<div class="field" style="margin-top:12px"><div class="row"><label class="f" style="margin:0">גוף הבקשה</label><span class="spacer"></span><button class="btn sm ghost" data-cmd="fmt-body">עיצוב JSON</button></div>
+          <textarea class="code" rows="5" data-b="request.body" spellcheck="false" placeholder='{"key": "value"}'>${esc(r.body)}</textarea></div>`}
+        <details style="margin-top:12px" ${advOpen ? 'open' : ''}><summary class="small" style="cursor:pointer">מתקדם: כותרות, זמן המתנה וניסיונות חוזרים</summary><div style="margin-top:12px">
+          <div class="field"><label class="f">כותרות (Headers)</label><div id="hdrs"></div>
+            <button class="btn sm" data-cmd="add-header">+ כותרת</button><div class="help">למשל Authorization: Bearer המפתח שלך</div></div>
+          <div class="grid2">
+            <div class="field"><label class="f">זמן המתנה לתשובה (שניות)</label><input type="number" min="1" max="120" data-b="request.timeout_seconds" data-t="num" value="${esc(r.timeout_seconds ?? 30)}"></div>
+            <div class="field"><label class="f">לנסות שוב כשאין תשובה</label><select data-b="request.retries" data-t="num">${opt([[0, 'לא'], [1, 'פעם אחת'], [2, 'פעמיים'], [3, '3 פעמים'], [4, '4 פעמים']], r.retries ?? 2)}</select></div>
+          </div></div></details>
+      </div>
+
+      <div class="card"><h2><span class="step">2</span>מתי להריץ</h2>
         <div class="chips" style="margin-bottom:14px">${Object.entries(META.types).map(([k, l]) => `<button class="chip ${s.type === k ? 'on' : ''}" data-stype="${k}">${l}</button>`).join('')}</div>
         <div id="sched"></div>
       </div>
 
-      <div class="card"><h2>הבקשה</h2>
-        <div class="field"><label class="f">כתובת</label><div class="row" style="flex-wrap:nowrap">
-          <select class="w-auto ltr" data-b="request.method" data-rerender>${opt(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map((x) => [x, x]), r.method)}</select>
-          <input type="text" class="ltr mono" data-b="request.url" value="${esc(r.url)}" placeholder="https://api.example.com/..."></div></div>
-        <div class="field"><label class="f">כותרות (Headers)</label><div id="hdrs"></div>
-          <button class="btn sm" data-cmd="add-header">+ כותרת</button><div class="help">למשל Authorization עם מפתח ה-API</div></div>
-        ${r.method === 'GET' ? '' : `<div class="field"><div class="row"><label class="f" style="margin:0">גוף הבקשה</label><span class="spacer"></span><button class="btn sm ghost" data-cmd="fmt-body">עיצוב JSON</button></div>
-          <textarea class="code" rows="6" data-b="request.body" spellcheck="false">${esc(r.body)}</textarea></div>`}
+      <div class="card"><h2><span class="step">3</span>איך לדעת שזה הצליח</h2>
+        <div class="help" style="margin:-6px 0 12px">יש שירותים שעונים "תקין" (קוד 200) גם כשיש שגיאה. כאן כותבים מה בתשובה מעיד על הצלחה או על שגיאה.</div>
         <div class="grid2">
-          <div class="field"><label class="f">זמן המתנה לתשובה (שניות)</label><input type="number" min="1" max="120" data-b="request.timeout_seconds" data-t="num" value="${esc(r.timeout_seconds ?? 30)}"></div>
-          <div class="field"><label class="f">ניסיונות חוזרים כשאין תשובה או שגיאת שרת</label><select data-b="request.retries" data-t="num">${opt([[0, 'בלי'], [1, '1'], [2, '2'], [3, '3'], [4, '4']], r.retries ?? 2)}</select></div>
+          <div class="field"><label class="f">התשובה חייבת להכיל</label><textarea rows="3" class="ltr" data-b="success.must_contain" data-t="lines" placeholder='"responseStatus":"OK"'>${lines(sc.must_contain)}</textarea>
+            <div class="help">אם אחד מאלה חסר - זה כשל. שורה לכל ביטוי.</div></div>
+          <div class="field"><label class="f">מילים שמעידות על שגיאה</label><textarea rows="3" class="ltr" data-b="success.error_words" data-t="lines" placeholder="error&#10;שגיאה">${lines(sc.error_words)}</textarea>
+            <div class="help">אם אחת מאלה מופיעה - זה כשל. שורה לכל מילה.</div></div>
         </div>
+        <details><summary class="small" style="cursor:pointer">מתקדם: קודי תגובה תקינים</summary><div class="field" style="margin-top:10px">
+          <input type="text" class="ltr mono" data-b="success.status" value="${esc(sc.status || '200-299')}"><div class="help">ברירת מחדל 200-299</div></div></details>
       </div>
 
-      <div class="card"><h2>מתי זה נחשב הצלחה</h2>
-        <div class="field"><label class="f">קודי תגובה תקינים</label><input type="text" class="ltr mono" data-b="success.status" value="${esc(sc.status || '200-299')}"><div class="help">למשל 200-299 או 200,201</div></div>
-        <div class="grid2">
-          <div class="field"><label class="f">מילים שמעידות על שגיאה (שורה לכל מילה)</label><textarea rows="4" data-b="success.error_words" data-t="lines" placeholder="error&#10;שגיאה&#10;&quot;success&quot;:false">${lines(sc.error_words)}</textarea>
-            <div class="help">גם אם השרת ענה 200 - אם אחת מהן מופיעה בתגובה, זה כשל</div></div>
-          <div class="field"><label class="f">התגובה חייבת להכיל (רשות)</label><textarea rows="4" data-b="success.must_contain" data-t="lines">${lines(sc.must_contain)}</textarea></div>
-        </div>
-      </div>
-
-      <div class="card"><h2>מה לשלוח לפי התגובה</h2>
-        <div class="help" style="margin:-6px 0 12px">כל כלל שולח מייל. הכללים נבדקים לפי הסדר.</div>
-        <div id="rules"></div>
-        <button class="btn" data-cmd="add-rule">+ כלל חדש</button>
-        <details style="margin-top:14px"><summary class="small" style="cursor:pointer">משתנים שאפשר לשלב בנושא ובתוכן</summary>
-          <div class="vars">${META.variables.map(([v, d]) => `<div><code class="ltr">${esc(v)}</code> <span class="muted">${esc(d)}</span></div>`).join('')}</div></details>
+      <div class="card"><h2><span class="step">4</span>מיילים</h2>
+        <div id="simple-mail"></div>
+        <details style="margin-top:6px" id="adv-rules" ${cfg.rules.some((r) => !isSimple(r)) ? 'open' : ''}><summary style="cursor:pointer;font-weight:500">מתקדם: מייל לפי תוכן התשובה</summary>
+          <div class="help" style="margin:8px 0 12px">למשל: אם בתשובה השדה status הוא "vip" - לשלוח רק למנהל. הכללים נבדקים לפי הסדר.</div>
+          <div id="rules"></div>
+          <button class="btn sm" data-cmd="add-rule">+ כלל לפי תוכן התשובה</button>
+        </details>
       </div>
     </div>`;
     renderSchedule();
@@ -516,30 +570,41 @@ async function editor(id, params) {
       ${c.op === 'exists' || c.op === 'not_exists' ? '' : `<input type="text" data-b="${path}.value" value="${esc(c.value ?? '')}" placeholder="ערך">`}
       <button class="x" data-cmd="del" data-path="${path}">✕</button></div>`;
   }
+  const toList = (v) => (Array.isArray(v) ? v.join(', ') : v || '');
+  const varChips = () => `<div class="var-chips"><span class="small faint">הוספה לטקסט:</span>${META.variables.filter(([v]) => !v.startsWith('{{secret') && v !== '{{timestamp}}').map(([v, d]) => `<button class="vchip" data-insert="${esc(v)}" title="${esc(d)}">${esc(d.split(' (')[0])}</button>`).join('')}</div>`;
+  function emailFields(p, rule) {
+    return `<div class="grid2"><div class="field"><label class="f">אל</label><input type="text" class="ltr" data-b="${p}.email.to" data-t="list" value="${esc(toList(rule.email.to))}" placeholder="a@x.com, b@x.com"></div>
+        <div class="field"><label class="f">עותק (רשות)</label><input type="text" class="ltr" data-b="${p}.email.cc" data-t="list" value="${esc(toList(rule.email.cc))}"></div></div>
+      <div class="field"><label class="f">נושא</label><input type="text" data-b="${p}.email.subject" value="${esc(rule.email.subject)}"></div>
+      <div class="field"><label class="f">תוכן</label><textarea rows="5" data-b="${p}.email.body">${esc(rule.email.body)}</textarea>${varChips()}</div>`;
+  }
   function renderRules() {
-    $('#rules').innerHTML = cfg.rules.map((rule, i) => {
+    cfg.rules.forEach((r) => { r.if ||= []; r.email ||= { to: [], cc: [], subject: '', body: '' }; });
+    const sIdx = simpleIndex('success'), fIdx = simpleIndex('failure');
+    $('#simple-mail').innerHTML = [['success', sIdx, 'לשלוח מייל כשהמשימה הצליחה'], ['failure', fIdx, 'לשלוח מייל כשהמשימה נכשלה']].map(([kind, idx, label]) => `
+      <div class="rule ${kind === 'failure' ? 'rule-bad' : 'rule-ok'}">
+        <label class="switch"><input type="checkbox" data-simple="${kind}" ${idx >= 0 ? 'checked' : ''}><span></span><b>${label}</b></label>
+        ${idx >= 0 ? `<div style="margin-top:12px">${emailFields(`rules.${idx}`, cfg.rules[idx])}</div>` : ''}
+      </div>`).join('');
+    const adv = cfg.rules.map((rule, i) => [rule, i]).filter(([, i]) => i !== sIdx && i !== fIdx);
+    $('#rules').innerHTML = adv.map(([rule, i], n) => {
       const p = `rules.${i}`;
-      rule.if ||= []; rule.email ||= { to: [], cc: [], subject: '', body: '' };
-      const toList = (v) => (Array.isArray(v) ? v.join(', ') : v || '');
       return `<div class="rule">
-        <div class="row" style="flex-wrap:nowrap;margin-bottom:10px"><span class="rule-num">${i + 1}</span>
+        <div class="row" style="flex-wrap:nowrap;margin-bottom:10px"><span class="rule-num">${n + 1}</span>
           <input type="text" data-b="${p}.name" value="${esc(rule.name || '')}" placeholder="שם הכלל (רשות)">
-          <button class="x" data-cmd="move" data-i="${i}" data-d="-1" ${i ? '' : 'disabled'}>↑</button><button class="x" data-cmd="move" data-i="${i}" data-d="1" ${i < cfg.rules.length - 1 ? '' : 'disabled'}>↓</button>
           <button class="x" data-cmd="del" data-path="${p}">✕</button></div>
         <div class="row"><b class="small">מתי:</b><select class="w-auto" data-b="${p}.when">${opt(Object.entries(META.when), rule.when || 'always')}</select>
           ${rule.if.length > 1 ? `<select class="w-auto" data-b="${p}.match">${opt([['all', 'וגם כל התנאים:'], ['any', 'וגם לפחות תנאי אחד:']], rule.match)}</select>` : rule.if.length ? '<span class="small">וגם:</span>' : ''}</div>
         <div style="margin-top:8px">${rule.if.map((c, j) => condRow(c, `${p}.if.${j}`)).join('')}</div>
-        <button class="btn sm" data-cmd="add-cond" data-i="${i}">+ תנאי על התגובה</button>
-        <div class="sub">שליחת מייל</div>
-        <div class="grid2"><div class="field"><label class="f">אל</label><input type="text" class="ltr" data-b="${p}.email.to" data-t="list" value="${esc(toList(rule.email.to))}" placeholder="a@x.com, b@x.com"></div>
-          <div class="field"><label class="f">עותק (רשות)</label><input type="text" class="ltr" data-b="${p}.email.cc" data-t="list" value="${esc(toList(rule.email.cc))}"></div></div>
-        <div class="field"><label class="f">נושא</label><input type="text" data-b="${p}.email.subject" value="${esc(rule.email.subject)}"></div>
-        <div class="field"><label class="f">תוכן</label><textarea rows="5" data-b="${p}.email.body">${esc(rule.email.body)}</textarea></div>
-        <div class="row"><label class="check small"><input type="checkbox" data-b="${p}.email.html" data-t="bool" ${rule.email.html ? 'checked' : ''}>התוכן כתוב ב-HTML</label>
-          <label class="check small"><input type="checkbox" data-b="${p}.stop" data-t="bool" ${rule.stop ? 'checked' : ''}>אם הכלל הזה התקיים, לא לבדוק את הכללים שאחריו</label></div>
+        <button class="btn sm" data-cmd="add-cond" data-i="${i}">+ תנאי על התשובה</button>
+        <div class="sub">המייל</div>
+        ${emailFields(p, rule)}
+        <label class="check small"><input type="checkbox" data-b="${p}.stop" data-t="bool" ${rule.stop ? 'checked' : ''}>אם הכלל הזה התקיים, לא לשלוח את המיילים שאחריו</label>
       </div>`;
-    }).join('') || '<div class="faint small" style="margin-bottom:10px">אין כללים - לא יישלחו מיילים.</div>';
+    }).join('');
   }
+
+  function simpleIndex(kind) { return cfg.rules.findIndex((r) => r.when === kind && isSimple(r)); }
 
   // ----- עריכת ערכים -----
   const parts = (path) => path.split('.').map((x) => (/^\d+$/.test(x) ? Number(x) : x));
@@ -573,6 +638,12 @@ async function editor(id, params) {
       setPath(el.dataset.b, valueOf(el));
       if (el.dataset.b === 'request.method' || el.hasAttribute('data-rerender')) renderForm();
     }
+    if (el.dataset.simple) {
+      const idx = simpleIndex(el.dataset.simple);
+      if (el.checked && idx < 0) cfg.rules.push(SIMPLE_MAIL[el.dataset.simple]());
+      if (!el.checked && idx >= 0) cfg.rules.splice(idx, 1);
+      renderRules();
+    }
     if (el.dataset.fieldkind) {
       const k = el.value;
       setPath(`${el.dataset.fieldkind}.field`, k === 'json' ? 'json:' : k === 'header' ? 'header:' : k);
@@ -580,9 +651,23 @@ async function editor(id, params) {
     }
     changed();
   });
+  let lastField = null;
+  $('#main').addEventListener('focusin', (e) => { if (e.target.matches('input[type=text], textarea')) lastField = e.target; });
   $('#main').addEventListener('click', async (e) => {
     const b = e.target.closest('button');
     if (!b || !$('#main').contains(b)) return;
+    if (b.dataset.insert) {
+      // מוסיף את המשתנה לשדה האחרון שנבחר בתוך אותו מייל (ברירת מחדל: התוכן)
+      const box = b.closest('.rule');
+      const target = lastField && box?.contains(lastField) ? lastField : box?.querySelector('textarea');
+      if (!target) return;
+      const pos = target.selectionStart ?? target.value.length;
+      target.value = target.value.slice(0, pos) + b.dataset.insert + target.value.slice(target.selectionEnd ?? pos);
+      target.focus();
+      target.setSelectionRange(pos + b.dataset.insert.length, pos + b.dataset.insert.length);
+      target.dispatchEvent(new Event('input', { bubbles: true }));
+      return;
+    }
     const s = cfg.schedule;
     if (b.dataset.stype) {
       if (b.dataset.stype !== s.type) cfg.schedule = SCHEDULE_DEFAULTS[b.dataset.stype](s.times);
@@ -618,7 +703,7 @@ async function editor(id, params) {
       else if (c === 'add-header') { headerRows.push({ k: '', v: '' }); renderHeaders(); }
       else if (c === 'del-header') { headerRows.splice(i, 1); renderHeaders(); }
       else if (c === 'fmt-body') { try { cfg.request.body = JSON.stringify(JSON.parse(cfg.request.body), null, 2); renderForm(); } catch { toast('הגוף אינו JSON תקין', 'bad'); } }
-      else if (c === 'add-rule') { cfg.rules.push(NEW_RULE()); renderRules(); $$('.rule').pop()?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+      else if (c === 'add-rule') { cfg.rules.push({ ...NEW_RULE(), if: [{ field: 'json:', op: 'equals', value: '' }], stop: true }); renderRules(); $$('#rules .rule').pop()?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
       else if (c === 'add-cond') { cfg.rules[i].if.push({ field: 'json:', op: 'equals', value: '' }); renderRules(); }
       else if (c === 'move') { const j = i + Number(b.dataset.d); [cfg.rules[i], cfg.rules[j]] = [cfg.rules[j], cfg.rules[i]]; renderRules(); }
       else if (c === 'del') {
@@ -630,10 +715,25 @@ async function editor(id, params) {
     changed();
   });
 
+  function renderGallery() {
+    $('#main').innerHTML = `<div class="card"><h2>במה להתחיל?</h2><div class="help" style="margin:-6px 0 14px">בחר דוגמה - היא תמלא את הטופס, ואז רק משנים את הפרטים שלך.</div>
+      <div class="gallery">${EXAMPLES.map((x, i) => `<button class="ex" data-ex="${i}"><b>${esc(x.title)}</b><span>${esc(x.desc)}</span></button>`).join('')}</div></div>`;
+    $$('[data-ex]').forEach((b) => (b.onclick = () => {
+      cfg = EXAMPLES[b.dataset.ex].config ? JSON.parse(JSON.stringify(EXAMPLES[b.dataset.ex].config)) : NEW_TASK();
+      dateRows = (cfg.schedule.dates || []).map((d) => ({ d: d.slice(0, 10), t: d.slice(11, 16) }));
+      headerRows = Object.entries(cfg.request.headers || {}).map(([k, v]) => ({ k, v }));
+      started = true;
+      setTab('form');
+    }));
+  }
+  let started = Boolean(id);
+
   function setTab(t) {
     if (tab === 'json' && t === 'form' && !applyJson()) return;
     tab = t;
     $$('[data-tab]').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
+    if (tab === 'form' && !started) { renderGallery(); return; }
+    started = true;
     tab === 'json' ? renderJson() : renderForm();
     validateNow();
   }
