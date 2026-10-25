@@ -50,19 +50,38 @@ async function releaseStaleLocks(db, settings, now) {
 /**
  * נעילה אטומית של משימה: רק מי שהצליח לעדכן את השורה מריץ אותה.
  * בתזמון רגיל מקדמים גם את next_run_at כדי שהדקה הבאה לא תבחר אותה שוב.
+ * במשימת תאריכים מדויקים, המועד הבא הוא התאריך הממתין הקרוב שעוד לא עבר.
  */
 export async function claimTask(db, task, { now, advanceSchedule }) {
   const token = crypto.randomUUID();
   let res;
   if (advanceSchedule) {
-    const next = task.schedule_type === 'once' ? null : computeNextRun(task, now);
+    let next;
+    if (task.schedule_type === 'once') {
+      const row = await db
+        .prepare('SELECT MIN(run_at) AS next FROM scheduler_task_dates WHERE task_id = ? AND ran_at IS NULL AND run_at > ?')
+        .bind(task.id, now + 999)
+        .first();
+      next = row?.next ?? null;
+    } else {
+      next = computeNextRun(task, now);
+    }
     res = await db
       .prepare(
-        `UPDATE scheduler_tasks SET running_since = ?, lock_token = ?, next_run_at = ?
+        `UPDATE scheduler_tasks SET running_since = ?, lock_token = ?, next_run_at = ?,
+           run_at = CASE WHEN schedule_type = 'once' THEN ? ELSE run_at END
          WHERE id = ? AND enabled = 1 AND running_since IS NULL AND next_run_at = ?`
       )
-      .bind(now, token, next, task.id, task.next_run_at)
+      .bind(now, token, next, next, task.id, task.next_run_at)
       .run();
+    if (res.meta.changes === 1 && task.schedule_type === 'once') {
+      // המועד הנוכחי (וכל מועד שהוחמץ לפניו) מסומן כמבוצע; ריצה אחת מכסה את כולם
+      await db
+        .prepare('UPDATE scheduler_task_dates SET ran_at = ? WHERE task_id = ? AND ran_at IS NULL AND run_at <= ?')
+        .bind(now, task.id, now + 999)
+        .run();
+      task.has_more_dates = next != null;
+    }
   } else {
     res = await db
       .prepare('UPDATE scheduler_tasks SET running_since = ?, lock_token = ? WHERE id = ? AND running_since IS NULL')

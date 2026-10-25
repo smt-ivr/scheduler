@@ -87,7 +87,7 @@ label.f { display: block; font-weight: 500; font-size: 14px; margin-bottom: 5px;
 .field { margin-bottom: 14px; }
 .help { color: var(--faint); font-size: 12.5px; margin-top: 4px; }
 .err { color: var(--bad); font-size: 13px; margin-top: 4px; }
-input[type=text], input[type=password], input[type=url], input[type=email], input[type=number], input[type=search], input[type=datetime-local], input[type=time], select, textarea {
+input[type=text], input[type=password], input[type=url], input[type=email], input[type=number], input[type=search], input[type=datetime-local], input[type=date], input[type=time], select, textarea {
   width: 100%; border: 1px solid var(--border-strong); background: var(--panel); border-radius: 8px; padding: 8px 11px; outline: none;
 }
 input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
@@ -257,6 +257,19 @@ function rel(ms) {
 }
 const dur = (ms) => (ms == null ? '—' : ms < 1000 ? `${ms} מ"ש` : `${(ms / 1000).toFixed(ms < 10000 ? 2 : 1)} ש'`);
 const num = (n) => Number(n || 0).toLocaleString('he-IL');
+// עזרים לתאריכים בפורמט "YYYY-MM-DDTHH:MM" לפי שעון ישראל
+const isoFmt = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+function localNowInput() {
+  const p = Object.fromEntries(isoFmt.formatToParts(Date.now()).map((x) => [x.type, x.value]));
+  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
+}
+const HE_DAY_NAMES = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
+const dayNameOf = (v) => { const [y, m, d] = v.slice(0, 10).split('-').map(Number); return `יום ${HE_DAY_NAMES[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]}`; };
+const fmtLocalInput = (v) => `${v.slice(8, 10)}.${v.slice(5, 7)}.${v.slice(0, 4)} ${v.slice(11, 16)}`;
+function addDays(dateStr, n) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
+}
 
 const ICONS = {
   dash: '<path d="M3 13h8V3H3zM13 21h8V11h-8zM3 21h8v-6H3zM13 3v6h8V3z"/>',
@@ -619,13 +632,15 @@ const HE_DAYS_SHORT = ["א'", "ב'", "ג'", "ד'", "ה'", "ו'", "ש'"];
 async function viewEditor(id) {
   let task;
   if (id) task = (await api('GET', `/tasks/${id}`)).task;
-  else task = { name: '', description: '', tags: '', task_type: 'http', schedule_type: 'cron', cron_expr: '0 8 * * *', run_at_local: '', http_method: 'GET', http_url: '', http_headers: '{}', http_body: '', expect_status: '200-299', expect_body: '', email_from: '', email_to: '', email_cc: '', email_bcc: '', email_reply_to: '', email_subject: '', email_html: '', email_text: '', enabled: 1, timeout_ms: 30000, max_attempts: 3, retry_delay_ms: 2000, notify_webhook_url: '', notify_email: '' };
+  else task = { name: '', description: '', tags: '', task_type: 'http', schedule_type: 'once', cron_expr: '0 8 * * *', run_dates: [], http_method: 'GET', http_url: '', http_headers: '{}', http_body: '', expect_status: '200-299', expect_body: '', email_from: '', email_to: '', email_cc: '', email_bcc: '', email_reply_to: '', email_subject: '', email_html: '', email_text: '', enabled: 1, timeout_ms: 30000, max_attempts: 3, retry_delay_ms: 2000, notify_webhook_url: '', notify_email: '' };
   if (!state.settings) state.settings = await api('GET', '/settings').catch(() => null);
   const info = state.settings || { secrets: [], variables: [], settings: {} };
 
   let headerRows;
   try { headerRows = Object.entries(JSON.parse(task.http_headers || '{}')).map(([k, v]) => ({ k, v })); } catch { headerRows = []; }
   let headersRaw = false;
+  let dateRows = (task.run_dates || []).filter((d) => d.ran_at == null && d.run_at > Date.now()).map((d) => ({ d: d.local.slice(0, 10), t: d.local.slice(11, 16) }));
+  if (!dateRows.length) dateRows = [{ d: '', t: '09:00' }];
 
   $('#view').innerHTML = `
     <div class="page-head"><div><h1>${id ? `עריכת משימה #${id}` : 'משימה חדשה'}</h1>${id ? `<div class="sub">${taskBadge(task)} · נוצרה ${fmt(task.created_at)} · ${num(task.total_runs)} ריצות, ${num(task.total_failures)} כשלים</div>` : ''}</div>
@@ -645,7 +660,7 @@ async function viewEditor(id) {
 
         <div class="card card-pad">
           <div class="row" style="margin-bottom:12px"><h2 style="margin:0">תזמון</h2><span class="spacer"></span>
-            <div class="seg" id="sched-seg"><button type="button" data-v="cron">חוזר (cron)</button><button type="button" data-v="once">חד-פעמי</button></div></div>
+            <div class="seg" id="sched-seg"><button type="button" data-v="once">תאריכים מדויקים</button><button type="button" data-v="cron">חוזר (cron)</button></div></div>
           <div id="sched-cron">
             <div class="field"><label class="f" for="cron_expr">ביטוי cron</label>
               <input type="text" id="cron_expr" class="ltr mono" value="${esc(task.cron_expr || '')}" spellcheck="false" autocomplete="off">
@@ -675,8 +690,12 @@ async function viewEditor(id) {
             </details>
           </div>
           <div id="sched-once">
-            <div class="field"><label class="f" for="run_at_local">תאריך ושעה (שעון ישראל)</label><input type="datetime-local" id="run_at_local" value="${esc(task.run_at_local || '')}" style="max-width:280px"><div class="err" data-err="run_at_local"></div>
-            <div class="help">אחרי הריצה המשימה תושבת אוטומטית.</div></div>
+            <label class="f">מתי להריץ? (שעון ישראל)</label>
+            <div id="dates-list"></div>
+            <div class="row" style="margin-top:8px"><button type="button" class="btn btn-sm" id="date-add">${icon('plus')}הוספת מועד</button></div>
+            <div class="err" data-err="run_dates"></div>
+            <div class="help">המשימה תרוץ בכל אחד מהמועדים. אחרי המועד האחרון היא תושבת אוטומטית.</div>
+            <div id="dates-history"></div>
           </div>
         </div>
 
@@ -853,9 +872,12 @@ async function viewEditor(id) {
       const list = $('#preview-list');
       if (!desc || !list) return; // המשתמש כבר עזב את העורך
       if (sched === 'once') {
-        const v = $('#run_at_local').value;
-        desc.textContent = 'ריצה חד-פעמית';
-        list.innerHTML = v ? `<li><span>${esc(v.replace('T', ' '))}</span></li>` : '<li class="faint">בחר תאריך ושעה</li>';
+        const items = [...new Set(dateRows.filter((r) => r.d && r.t).map((r) => `${r.d}T${r.t}`))].sort();
+        const nowLocal = localNowInput();
+        desc.textContent = items.length === 1 ? 'מועד אחד' : items.length ? `${items.length} מועדים` : '';
+        list.innerHTML = items.length
+          ? items.map((v) => `<li><span>${dayNameOf(v)}, ${esc(fmtLocalInput(v))}</span>${v <= nowLocal ? '<span class="err small" style="margin:0">כבר עבר</span>' : ''}</li>`).join('')
+          : '<li class="faint">בחר תאריך ושעה</li>';
         return;
       }
       const expr = $('#cron_expr').value.trim();
@@ -871,7 +893,46 @@ async function viewEditor(id) {
     }, 250);
   }
   $('#cron_expr').addEventListener('input', updatePreview);
-  $('#run_at_local').addEventListener('input', updatePreview);
+
+  // תאריכים מדויקים
+  function renderDates() {
+    const today = localNowInput().slice(0, 10);
+    $('#dates-list').innerHTML = dateRows
+      .map((r, i) => `<div class="row" style="margin-bottom:6px;flex-wrap:nowrap" data-i="${i}">
+        <input type="date" value="${esc(r.d)}" min="${today}" data-d style="width:auto">
+        <input type="time" value="${esc(r.t)}" data-t style="width:auto">
+        <span class="faint small" style="min-width:60px">${r.d ? dayNameOf(`${r.d}T00:00`) : ''}</span>
+        <button type="button" class="btn btn-sm btn-ghost" data-del aria-label="הסרה" ${dateRows.length === 1 ? 'disabled' : ''}>✕</button></div>`)
+      .join('');
+    updatePreview();
+  }
+  $('#dates-list').addEventListener('input', (e) => {
+    const row = e.target.closest('[data-i]');
+    if (!row) return;
+    const r = dateRows[row.dataset.i];
+    if (e.target.hasAttribute('data-d')) { r.d = e.target.value; $('span', row).textContent = r.d ? dayNameOf(`${r.d}T00:00`) : ''; }
+    else r.t = e.target.value;
+    updatePreview();
+  });
+  $('#dates-list').addEventListener('click', (e) => {
+    if (!e.target.closest('[data-del]')) return;
+    dateRows.splice(e.target.closest('[data-i]').dataset.i, 1);
+    renderDates();
+  });
+  $('#date-add').onclick = () => {
+    // המועד החדש: יום אחרי המועד האחרון, באותה שעה
+    const last = dateRows[dateRows.length - 1];
+    const base = last?.d || localNowInput().slice(0, 10);
+    dateRows.push({ d: addDays(base, 1), t: last?.t || '09:00' });
+    renderDates();
+    $$('#dates-list input[data-d]').pop()?.focus();
+  };
+  const pastDates = (task.run_dates || []).filter((d) => d.ran_at != null || d.run_at <= Date.now());
+  if (pastDates.length) {
+    $('#dates-history').innerHTML = `<h3 style="margin-top:16px">מועדים שעברו</h3><ul class="list small">${pastDates
+      .map((d) => `<li><span>${dayNameOf(d.local)}, ${esc(fmtLocalInput(d.local))}</span>${d.ran_at ? badge(['רץ', 'b-ok']) : badge(['לא רץ', 'b-gray'])}</li>`)
+      .join('')}</ul>`;
+  }
   $$('[data-cron]').forEach((b) => (b.onclick = () => { $('#cron_expr').value = b.dataset.cron; updatePreview(); }));
 
   // בונה cron
@@ -918,7 +979,7 @@ async function viewEditor(id) {
     return {
       name: $('#name').value, description: $('#description').value, tags: $('#tags').value,
       task_type: type, schedule_type: sched, enabled: $('#enabled').checked,
-      cron_expr: $('#cron_expr').value, run_at_local: $('#run_at_local').value,
+      cron_expr: $('#cron_expr').value, run_dates_local: dateRows.filter((r) => r.d && r.t).map((r) => `${r.d}T${r.t}`),
       http_method: $('#http_method').value, http_url: $('#http_url').value, http_headers: headersJson(), http_body: $('#http_body').value,
       expect_status: $('#expect_status').value, expect_body: $('#expect_body').value,
       email_from: $('#email_from').value, email_to: $('#email_to').value, email_cc: $('#email_cc').value, email_bcc: $('#email_bcc').value,
@@ -988,6 +1049,7 @@ async function viewEditor(id) {
   }
 
   renderHeaders();
+  renderDates();
   applyType();
   applySched();
   applyMethod();
@@ -1215,7 +1277,7 @@ async function viewSettings() {
         <h2>גיבוי ושחזור משימות</h2>
         <div class="row"><a class="btn" href="${BASE}/api/export" download>ייצוא כל המשימות (JSON)</a>
           <label class="btn">ייבוא מקובץ<input type="file" id="import-file" accept="application/json,.json" class="hidden"></label></div>
-        <div class="help">ייבוא מוסיף משימות חדשות ולא דורס משימות קיימות. משימה חד-פעמית שמועדה עבר מיובאת מושבתת.</div>
+        <div class="help">ייבוא מוסיף משימות חדשות ולא דורס משימות קיימות. במשימת תאריכים מדויקים מיובאים רק המועדים העתידיים.</div>
       </div>
     </form>`;
   $('#s-mode').value = s.notify_mode;

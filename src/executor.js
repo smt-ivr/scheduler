@@ -227,7 +227,7 @@ export async function executeTask(env, task, settings, { trigger, lockToken, sch
         error,
         status,
         final.ok ? 0 : 1,
-        trigger === 'schedule' && task.schedule_type === 'once' ? 1 : 0,
+        trigger === 'schedule' && task.schedule_type === 'once' && !task.has_more_dates ? 1 : 0,
         task.id,
         lockToken
       ),

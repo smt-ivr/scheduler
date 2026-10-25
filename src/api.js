@@ -39,7 +39,7 @@ function isUrlLike(s) {
 }
 
 /** מנרמל ומאמת קלט של משימה. מחזיר { values, errors } */
-export function normalizeTask(input, { now = Date.now(), previous = null } = {}) {
+export function normalizeTask(input, { now = Date.now() } = {}) {
   const errors = {};
   const v = {};
   v.name = str(input.name, 200).trim();
@@ -60,10 +60,25 @@ export function normalizeTask(input, { now = Date.now(), previous = null } = {})
     const err = validateCron(v.cron_expr);
     if (err) errors.cron_expr = err;
   } else {
+    // תאריכים מדויקים: רשימה של מועדים (או מועד יחיד, לתאימות לאחור)
     v.cron_expr = null;
-    v.run_at = input.run_at_local != null ? parseLocalDateTime(input.run_at_local) : Number(input.run_at) || null;
-    if (!v.run_at) errors.run_at_local = 'יש לבחור תאריך ושעה';
-    else if (v.enabled && v.run_at <= now && v.run_at !== previous?.run_at) errors.run_at_local = 'המועד שנבחר כבר עבר';
+    let list = input.run_dates_local;
+    if (!Array.isArray(list)) list = input.run_at_local ? [input.run_at_local] : input.run_at ? [formatLocalInput(Number(input.run_at))] : [];
+    const parsed = [];
+    let bad = null;
+    for (const s of list.slice(0, 1000)) {
+      if (!String(s ?? '').trim()) continue;
+      const ms = parseLocalDateTime(s);
+      if (ms) parsed.push(ms);
+      else bad ??= s;
+    }
+    v.run_dates = [...new Set(parsed)].sort((a, b) => a - b);
+    const past = v.run_dates.find((ms) => ms <= now);
+    if (bad) errors.run_dates = `תאריך לא תקין: ${bad}`;
+    else if (!v.run_dates.length) errors.run_dates = 'יש להוסיף לפחות מועד אחד';
+    else if (v.run_dates.length > 500) errors.run_dates = 'אפשר להגדיר עד 500 מועדים';
+    else if (past && v.enabled) errors.run_dates = `המועד ${formatDateTime(past).slice(0, 16)} כבר עבר`;
+    v.run_at = v.run_dates.find((ms) => ms > now) ?? null;
   }
 
   v.http_method = METHODS.includes(String(input.http_method).toUpperCase()) ? String(input.http_method).toUpperCase() : 'GET';
@@ -115,21 +130,43 @@ export function normalizeTask(input, { now = Date.now(), previous = null } = {})
 }
 
 /** מה שנשלח לממשק על משימה */
-function presentTask(t) {
+/** pending: מספר המועדים העתידיים שממתינים (למשימת תאריכים); dates: כל המועדים, לעורך */
+function presentTask(t, { pending = null, dates = null } = {}) {
   let description = '';
   if (t.schedule_type === 'cron') {
     try {
       description = describeCron(t.cron_expr);
     } catch {}
-  } else if (t.run_at) {
-    description = `חד-פעמי: ${formatDateTime(t.run_at).slice(0, 16)}`;
+  } else {
+    const n = pending ?? (dates ? dates.filter((d) => d.ran_at == null && d.run_at > Date.now()).length : t.run_at ? 1 : 0);
+    const nextText = t.run_at ? formatDateTime(t.run_at).slice(0, 16) : '';
+    if (n === 0) description = t.last_run_at ? 'תאריכים מדויקים: כל המועדים רצו' : 'תאריכים מדויקים: אין מועדים עתידיים';
+    else if (n === 1) description = `תאריך מדויק: ${nextText}`;
+    else description = `${n} תאריכים מדויקים, הבא: ${nextText}`;
   }
-  return {
-    ...t,
-    lock_token: undefined,
-    run_at_local: t.run_at ? formatLocalInput(t.run_at) : '',
-    schedule_text: description,
-  };
+  const out = { ...t, lock_token: undefined, schedule_text: description };
+  if (dates) {
+    out.run_dates = dates.map((d) => ({ run_at: d.run_at, ran_at: d.ran_at, local: formatLocalInput(d.run_at) }));
+  }
+  return out;
+}
+
+async function fullTask(db, id) {
+  const t = await getTask(db, id);
+  return t ? presentTask(t, { dates: await getTaskDates(db, id) }) : null;
+}
+
+async function getTaskDates(db, taskId) {
+  const { results } = await db.prepare('SELECT run_at, ran_at FROM scheduler_task_dates WHERE task_id = ? ORDER BY run_at').bind(taskId).all();
+  return results;
+}
+
+/** מחליף את המועדים הממתינים של משימה. מועדים שכבר רצו נשארים כהיסטוריה. */
+function saveDatesStatements(db, taskId, dates = []) {
+  return [
+    db.prepare('DELETE FROM scheduler_task_dates WHERE task_id = ? AND ran_at IS NULL').bind(taskId),
+    ...dates.map((ms) => db.prepare('INSERT OR IGNORE INTO scheduler_task_dates (task_id, run_at) VALUES (?, ?)').bind(taskId, ms)),
+  ];
 }
 
 async function audit(env, request, action, taskId = null, details = null) {
@@ -159,7 +196,9 @@ async function insertTask(db, v, now = Date.now()) {
     .prepare(`INSERT INTO scheduler_tasks (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`)
     .bind(...vals)
     .run();
-  return res.meta.last_row_id;
+  const id = res.meta.last_row_id;
+  if (v.schedule_type === 'once' && v.run_dates?.length) await db.batch(saveDatesStatements(db, id, v.run_dates));
+  return id;
 }
 
 // ---------- handlers ----------
@@ -228,6 +267,11 @@ async function dashboard(env) {
 
 async function listTasks(env, url) {
   const { results } = await env.DB.prepare('SELECT * FROM scheduler_tasks ORDER BY enabled DESC, COALESCE(next_run_at, 9e15), id').all();
+  const pendingRows = await env.DB
+    .prepare('SELECT task_id, COUNT(*) AS n FROM scheduler_task_dates WHERE ran_at IS NULL AND run_at > ? GROUP BY task_id')
+    .bind(Date.now())
+    .all();
+  const pending = new Map(pendingRows.results.map((r) => [r.task_id, r.n]));
   const q = (url.searchParams.get('q') || '').toLowerCase();
   const status = url.searchParams.get('status') || '';
   const type = url.searchParams.get('type') || '';
@@ -243,7 +287,7 @@ async function listTasks(env, url) {
     return true;
   });
   const tags = [...new Set(results.flatMap((t) => String(t.tags || '').split(',').map((x) => x.trim()).filter(Boolean)))].sort();
-  return json({ tasks: filtered.map(presentTask), tags, total: results.length });
+  return json({ tasks: filtered.map((t) => presentTask(t, { pending: pending.get(t.id) ?? 0 })), tags, total: results.length });
 }
 
 async function createTask(env, request) {
@@ -252,7 +296,7 @@ async function createTask(env, request) {
   if (Object.keys(errors).length) return fail('יש שגיאות בטופס', 422, { fields: errors });
   const id = await insertTask(env.DB, values);
   await audit(env, request, 'task.create', id, values.name);
-  return json({ task: presentTask(await getTask(env.DB, id)) }, 201);
+  return json({ task: await fullTask(env.DB, id) }, 201);
 }
 
 async function updateTask(env, request, id) {
@@ -260,17 +304,19 @@ async function updateTask(env, request, id) {
   const prev = await getTask(db, id);
   if (!prev) return fail('המשימה לא נמצאה', 404);
   const body = await readJson(request);
-  const { values, errors } = normalizeTask(body, { previous: prev });
+  const { values, errors } = normalizeTask(body);
   if (Object.keys(errors).length) return fail('יש שגיאות בטופס', 422, { fields: errors });
   const now = Date.now();
   const next = computeNextRun(values, now);
   const sets = CONFIG_FIELDS.map((f) => `${f} = ?`).join(', ');
-  await db
-    .prepare(`UPDATE scheduler_tasks SET ${sets}, next_run_at = ?, updated_at = ? WHERE id = ?`)
-    .bind(...CONFIG_FIELDS.map((f) => values[f] ?? null), next, now, id)
-    .run();
+  await db.batch([
+    db
+      .prepare(`UPDATE scheduler_tasks SET ${sets}, next_run_at = ?, updated_at = ? WHERE id = ?`)
+      .bind(...CONFIG_FIELDS.map((f) => values[f] ?? null), next, now, id),
+    ...saveDatesStatements(db, id, values.schedule_type === 'once' ? values.run_dates : []),
+  ]);
   await audit(env, request, 'task.update', id, values.name);
-  return json({ task: presentTask(await getTask(db, id)) });
+  return json({ task: await fullTask(db, id) });
 }
 
 async function deleteTask(env, request, id) {
@@ -280,6 +326,7 @@ async function deleteTask(env, request, id) {
   await db.batch([
     db.prepare('DELETE FROM scheduler_tasks WHERE id = ?').bind(id),
     db.prepare('DELETE FROM scheduler_runs WHERE task_id = ?').bind(id),
+    db.prepare('DELETE FROM scheduler_task_dates WHERE task_id = ?').bind(id),
   ]);
   await audit(env, request, 'task.delete', id, t.name);
   return json({ ok: true });
@@ -290,13 +337,23 @@ async function setEnabled(env, request, id, enabled) {
   const t = await getTask(db, id);
   if (!t) return fail('המשימה לא נמצאה', 404);
   const now = Date.now();
-  if (enabled && t.schedule_type === 'once' && (!t.run_at || t.run_at <= now)) {
-    return fail('מועד הריצה החד-פעמית כבר עבר. ערוך את המשימה וקבע מועד חדש', 409);
+  let runAt = t.run_at;
+  if (t.schedule_type === 'once') {
+    // המועד הבא שעוד לא עבר; מועדים שעברו בזמן שהמשימה הייתה מושבתת מדולגים
+    const row = await db
+      .prepare('SELECT MIN(run_at) AS next FROM scheduler_task_dates WHERE task_id = ? AND ran_at IS NULL AND run_at > ?')
+      .bind(id, now)
+      .first();
+    runAt = row?.next ?? null;
+    if (enabled && !runAt) return fail('אין למשימה מועדים עתידיים. ערוך אותה והוסף תאריך חדש', 409);
   }
-  const next = computeNextRun({ ...t, enabled: enabled ? 1 : 0 }, now);
-  await db.prepare('UPDATE scheduler_tasks SET enabled = ?, next_run_at = ?, updated_at = ? WHERE id = ?').bind(enabled ? 1 : 0, next, now, id).run();
+  const next = computeNextRun({ ...t, run_at: runAt, enabled: enabled ? 1 : 0 }, now);
+  await db
+    .prepare('UPDATE scheduler_tasks SET enabled = ?, run_at = ?, next_run_at = ?, updated_at = ? WHERE id = ?')
+    .bind(enabled ? 1 : 0, runAt, next, now, id)
+    .run();
   await audit(env, request, enabled ? 'task.enable' : 'task.disable', id, t.name);
-  return json({ task: presentTask(await getTask(db, id)) });
+  return json({ task: await fullTask(db, id) });
 }
 
 async function duplicateTask(env, request, id) {
@@ -305,9 +362,12 @@ async function duplicateTask(env, request, id) {
   const copy = Object.fromEntries(CONFIG_FIELDS.map((f) => [f, t[f]]));
   copy.name = `${t.name} (עותק)`;
   copy.enabled = 0;
+  if (t.schedule_type === 'once') {
+    copy.run_dates = (await getTaskDates(env.DB, id)).filter((d) => d.ran_at == null && d.run_at > Date.now()).map((d) => d.run_at);
+  }
   const newId = await insertTask(env.DB, copy);
   await audit(env, request, 'task.duplicate', newId, `מתוך #${id}`);
-  return json({ task: presentTask(await getTask(env.DB, newId)) }, 201);
+  return json({ task: await fullTask(env.DB, newId) }, 201);
 }
 
 async function runNow(env, request, ctx, id) {
@@ -337,7 +397,7 @@ async function unlockTask(env, request, id) {
     db.prepare('UPDATE scheduler_tasks SET running_since = NULL, lock_token = NULL WHERE id = ?').bind(id),
   ]);
   await audit(env, request, 'task.unlock', id);
-  return json({ task: presentTask(await getTask(db, id)) });
+  return json({ task: await fullTask(db, id) });
 }
 
 async function bulk(env, request) {
@@ -360,7 +420,7 @@ async function previewRequest(env, request) {
   const body = await readJson(request);
   const { values, errors } = normalizeTask({ ...body, name: body.name || 'תצוגה מקדימה', enabled: 0 });
   delete errors.name;
-  delete errors.run_at_local;
+  delete errors.run_dates;
   if (Object.keys(errors).length) return fail('יש שגיאות בטופס', 422, { fields: errors });
   const ctx = createContext(env, { task: { id: body.id || 0, name: values.name }, runId: 'preview' });
   ctx.maskSecrets = true;
@@ -553,6 +613,12 @@ async function updateSettings(env, request, base = '') {
 
 async function exportTasks(env, request) {
   const { results } = await env.DB.prepare('SELECT * FROM scheduler_tasks ORDER BY id').all();
+  const { results: dateRows } = await env.DB
+    .prepare('SELECT task_id, run_at FROM scheduler_task_dates WHERE ran_at IS NULL AND run_at > ? ORDER BY run_at')
+    .bind(Date.now())
+    .all();
+  const datesByTask = new Map();
+  for (const r of dateRows) datesByTask.set(r.task_id, [...(datesByTask.get(r.task_id) || []), formatLocalInput(r.run_at)]);
   await audit(env, request, 'tasks.export', null, `${results.length} משימות`);
   return new Response(
     JSON.stringify(
@@ -560,7 +626,10 @@ async function exportTasks(env, request) {
         format: 'cloudflare-scheduler',
         version: 1,
         exported_at: new Date().toISOString(),
-        tasks: results.map((t) => ({ ...Object.fromEntries(CONFIG_FIELDS.map((f) => [f, t[f]])), run_at_local: t.run_at ? formatLocalInput(t.run_at) : undefined })),
+        tasks: results.map((t) => ({
+          ...Object.fromEntries(CONFIG_FIELDS.filter((f) => f !== 'run_at').map((f) => [f, t[f]])),
+          run_dates_local: t.schedule_type === 'once' ? datesByTask.get(t.id) || [] : undefined,
+        })),
       },
       null,
       2
@@ -576,11 +645,13 @@ async function importTasks(env, request) {
   const created = [];
   const failed = [];
   for (const [i, raw] of tasks.slice(0, 500).entries()) {
-    // משימה חד-פעמית שמועדה עבר מיובאת כמושבתת
+    // משימת תאריכים שחלק ממועדיה עברו מיובאת עם המועדים העתידיים בלבד, או מושבתת אם לא נשארו כאלה
     const input = { ...raw };
-    if (input.schedule_type === 'once' && input.run_at_local == null && input.run_at) input.run_at_local = formatLocalInput(Number(input.run_at));
     let { values, errors } = normalizeTask(input);
-    if (errors.run_at_local === 'המועד שנבחר כבר עבר') ({ values, errors } = normalizeTask({ ...input, enabled: 0 }));
+    if (errors.run_dates?.includes('כבר עבר')) {
+      const future = values.run_dates.filter((ms) => ms > Date.now()).map(formatLocalInput);
+      ({ values, errors } = normalizeTask(future.length ? { ...input, run_dates_local: future } : { ...input, enabled: 0 }));
+    }
     if (Object.keys(errors).length) failed.push({ index: i, name: raw?.name, errors });
     else created.push(await insertTask(env.DB, values));
   }
@@ -612,8 +683,8 @@ export async function handleApi(request, env, ctx, url, path, base = '') {
   if ((match = /^\/tasks\/(\d+)$/.exec(p))) {
     const id = Number(match[1]);
     if (m === 'GET') {
-      const t = await getTask(env.DB, id);
-      return t ? json({ task: presentTask(t) }) : fail('המשימה לא נמצאה', 404);
+      const t = await fullTask(env.DB, id);
+      return t ? json({ task: t }) : fail('המשימה לא נמצאה', 404);
     }
     if (m === 'PUT') return updateTask(env, request, id);
     if (m === 'DELETE') return deleteTask(env, request, id);
