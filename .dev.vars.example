@@ -1,0 +1,5 @@
+# העתק ל-.dev.vars לפיתוח מקומי בלבד (הקובץ .dev.vars לא נכנס ל-git)
+ADMIN_PASSWORD=change-me
+RESEND_API_KEY=re_xxx
+RESEND_WEBHOOK_SECRET=whsec_xxx
+MY_API_TOKEN=example-token

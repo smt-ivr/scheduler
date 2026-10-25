@@ -1,0 +1,34 @@
+{
+  "format": "cloudflare-scheduler",
+  "version": 1,
+  "tasks": [
+    {
+      "name": "סנכרון הזמנות יומי",
+      "description": "שולח לשרת בקשה לסנכרן את הזמנות אתמול",
+      "tags": "סנכרון, דוחות",
+      "task_type": "http",
+      "schedule_type": "cron",
+      "cron_expr": "30 7 * * 0-4",
+      "http_method": "POST",
+      "http_url": "https://api.example.com/v1/reports/sync",
+      "http_headers": "{\"Authorization\": \"Bearer {{secret:MY_API_TOKEN}}\"}",
+      "http_body": "{\"date\": \"{{date:-1}}\", \"requested_at\": \"{{datetime}}\", \"request_id\": \"{{uuid}}\"}",
+      "expect_status": "200-299",
+      "enabled": 0,
+      "timeout_ms": 30000,
+      "max_attempts": 3,
+      "retry_delay_ms": 2000,
+      "notify_email": "ops@your-domain.com"
+    },
+    {
+      "name": "תזכורת שבועית במייל",
+      "task_type": "email",
+      "schedule_type": "cron",
+      "cron_expr": "0 9 * * 0",
+      "email_to": "team@your-domain.com",
+      "email_subject": "תזכורת שבועית - {{date}}",
+      "email_html": "<div dir=\"rtl\" style=\"font-family:Arial\">שבוע טוב!<br>זו תזכורת אוטומטית שנשלחה ב-{{datetime}}.</div>",
+      "enabled": 0
+    }
+  ]
+}

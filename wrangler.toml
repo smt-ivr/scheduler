@@ -1,0 +1,20 @@
+name = "scheduler"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+workers_dev = true
+
+# Cron אחד שרץ כל דקה ובודק אילו משימות הגיע זמנן
+[triggers]
+crons = ["* * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "yemot-pay"
+database_id = "dd8bf73b-6dca-446d-a929-e467025ceac7"
+migrations_dir = "migrations"
+# חשוב: ברירת המחדל של wrangler היא טבלה בשם d1_migrations.
+# כדי לא לכתוב לטבלה שאינה scheduler_, טבלת המעקב אחרי ה-migrations מקבלת קידומת.
+migrations_table = "scheduler_migrations"
+
+[observability]
+enabled = true

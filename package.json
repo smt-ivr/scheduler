@@ -1,0 +1,17 @@
+{
+  "name": "scheduler",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "מתזמן משימות HTTP ומיילים על Cloudflare Workers",
+  "scripts": {
+    "dev": "wrangler dev --test-scheduled",
+    "deploy": "wrangler deploy",
+    "test": "node --test test/*.test.js",
+    "db:migrate:local": "wrangler d1 migrations apply yemot-pay --local",
+    "db:migrate:remote": "wrangler d1 migrations apply yemot-pay --remote"
+  },
+  "devDependencies": {
+    "wrangler": "^4.150.0"
+  }
+}
