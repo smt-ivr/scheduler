@@ -18,6 +18,12 @@ migrations_table = "scheduler_migrations"
 
 # נתיב הבסיס כשה-Worker מחובר לדומיין תחת נתיב (Route: smti.uk/scheduler*).
 # בכתובת workers.dev הממשק ממשיך לעבוד גם מהשורש.
+# קבצי .md (מדריך ה-JSON) נטענים כטקסט
+[[rules]]
+type = "Text"
+globs = ["**/*.md"]
+fallthrough = true
+
 [vars]
 BASE_PATH = "/scheduler"
 

@@ -67,3 +67,14 @@ test('JSON body stays valid with quotes and hebrew dates', () => {
   assert.equal(parsed.n, 5);
   assert.equal(renderBody('a={{date}}', ctx), 'a=2026-10-25');
 });
+
+test('every example in the docs is a valid task', async () => {
+  const { readFileSync } = await import('node:fs');
+  const md = readFileSync(new URL('../src/task-format.md', import.meta.url), 'utf8');
+  const blocks = [...md.matchAll(/```json\n([\s\S]*?)```/g)].map((m) => m[1]).filter((b) => b.trimStart().startsWith('{\n  "name"') && b.includes('"schedule": {') && !b.includes('"schedule": { }'));
+  assert.ok(blocks.length >= 3);
+  for (const b of blocks) {
+    const { errors } = normalizeTask(JSON.parse(b));
+    assert.deepEqual(errors, [], b.slice(0, 80));
+  }
+});

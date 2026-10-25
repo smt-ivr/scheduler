@@ -124,6 +124,10 @@ textarea.code { font-family: var(--mono); font-size: 13px; direction: ltr; text-
 .ex { text-align: start; border: 1px solid var(--line2); background: var(--panel); border-radius: 10px; padding: 14px; cursor: pointer; display: grid; gap: 4px; }
 .ex:hover { border-color: var(--accent); background: var(--accent-soft); }
 .ex span { color: var(--muted); font-size: 13px; }
+.md { line-height: 1.7; }
+.md .md-h { margin: 22px 0 10px; } .md h2.md-h { font-size: 21px; margin-top: 0; } .md h3.md-h { font-size: 18px; border-bottom: 1px solid var(--line); padding-bottom: 6px; } .md h4.md-h { font-size: 15.5px; }
+.md p { margin: 8px 0; } .md pre.box { margin: 10px 0; max-height: none; } .md table { margin: 10px 0; } .md hr { border: 0; border-top: 1px solid var(--line); margin: 22px 0; }
+.md code { background: var(--soft); padding: 1px 5px; border-radius: 4px; }
 .rule-num { width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--on-accent); display: grid; place-items: center; font-weight: 700; font-size: 13px; flex: none; }
 .cond { display: flex; gap: 6px; margin-bottom: 6px; flex-wrap: wrap; }
 .cond > select, .cond > input { flex: 1 1 120px; width: auto; }
@@ -232,7 +236,7 @@ function showLogin() {
 function shell() {
   $('#app').innerHTML = `<header class="top"><div class="top-in">
       <div class="brand"><i></i><span>מתזמן משימות</span></div>
-      <nav class="tabs"><a href="#/" data-nav="tasks">משימות</a><a href="#/runs" data-nav="runs">יומן ריצות</a><a href="#/settings" data-nav="settings">הגדרות מייל</a></nav>
+      <nav class="tabs"><a href="#/" data-nav="tasks">משימות</a><a href="#/runs" data-nav="runs">יומן ריצות</a><a href="#/settings" data-nav="settings">הגדרות מייל</a><a href="#/docs" data-nav="docs">תיעוד</a></nav>
       <span class="spacer"></span><button class="btn ghost sm" id="logout">יציאה</button></div></header><main id="view"></main>`;
   $('#logout').onclick = async () => { await api('POST', '/logout').catch(() => {}); showLogin(); };
 }
@@ -251,6 +255,7 @@ async function route() {
     if (parts[0] === 'task') await editor(parts[1] === 'new' ? null : Number(parts[1]), new URLSearchParams(q));
     else if (parts[0] === 'runs') await runsPage(new URLSearchParams(q));
     else if (parts[0] === 'settings') await settingsPage();
+    else if (parts[0] === 'docs') await docsPage();
     else await tasksPage();
   } catch (e) {
     if (e.message !== 'נדרשת התחברות') $('#view').innerHTML = `<div class="errors">שגיאה: ${esc(e.message)}</div>`;
@@ -427,7 +432,7 @@ async function editor(id, params) {
       <div class="row" style="margin-bottom:10px"><h2 style="margin:0">המשימה כ-JSON</h2><span class="spacer"></span>
         <button class="btn sm" id="j-copy">העתקה</button><button class="btn sm primary" id="j-apply">החלה על הטופס</button></div>
       <textarea id="j" class="code" rows="28" spellcheck="false">${esc(JSON.stringify(cfg, null, 2))}</textarea>
-      <div class="help">אפשר להדביק כאן משימה שלמה. "החלה" בודקת אותה וממלאת את הטופס; "שמירה" שומרת אותה כמו שהיא.</div></div>`;
+      <div class="help">אפשר להדביק כאן משימה שלמה. "החלה" בודקת אותה וממלאת את הטופס; "שמירה" שומרת אותה כמו שהיא. מבנה מלא ודוגמאות: <a href="#/docs">תיעוד</a>.</div></div>`;
     $('#j-copy').onclick = () => { navigator.clipboard?.writeText($('#j').value); toast('הועתק'); };
     $('#j-apply').onclick = () => { if (applyJson()) { setTab('form'); toast('הוחל'); } };
     $('#j').oninput = () => { try { cfg = JSON.parse($('#j').value); clearTimeout(vTimer); vTimer = setTimeout(validateNow, 500); } catch {} };
@@ -831,6 +836,55 @@ async function settingsPage() {
   $('#t-send').onclick = async () => {
     try { await api('POST', '/settings/test', { to: $('#t-to').value }); toast('נשלח', 'ok'); } catch (err) { toast(err.message, 'bad'); }
   };
+}
+
+// ---------- תיעוד ----------
+// מציג Markdown פשוט: כותרות, טבלאות, רשימות, בלוקי קוד, קו מפריד, **מודגש** ו-`קוד`
+function mdToHtml(md) {
+  const inline = (t) => esc(t).replace(/`([^`]+)`/g, '<code class="ltr">$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+  const out = [];
+  const lines = md.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    if (l.startsWith('```')) {
+      const code = [];
+      while (++i < lines.length && !lines[i].startsWith('```')) code.push(lines[i]);
+      out.push(`<pre class="box">${esc(code.join('\n'))}</pre>`);
+    } else if (/^#{1,4} /.test(l)) {
+      const n = l.match(/^#+/)[0].length;
+      out.push(`<h${n + 1} class="md-h">${inline(l.slice(n + 1))}</h${n + 1}>`);
+    } else if (l.startsWith('|')) {
+      const rows = [];
+      for (; i < lines.length && lines[i].startsWith('|'); i++) rows.push(lines[i]);
+      i--;
+      const cells = (r) => r.replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
+      out.push(`<div class="tbl"><table><tr>${cells(rows[0]).map((c) => `<th>${inline(c)}</th>`).join('')}</tr>${rows.slice(2).map((r) => `<tr>${cells(r).map((c) => `<td>${inline(c)}</td>`).join('')}</tr>`).join('')}</table></div>`);
+    } else if (/^(\d+\.|-) /.test(l)) {
+      const tag = l.startsWith('-') ? 'ul' : 'ol';
+      const items = [];
+      for (; i < lines.length && /^(\d+\.|-) /.test(lines[i]); i++) items.push(lines[i].replace(/^(\d+\.|-) /, ''));
+      i--;
+      out.push(`<${tag}>${items.map((x) => `<li>${inline(x)}</li>`).join('')}</${tag}>`);
+    } else if (l.trim() === '---') out.push('<hr>');
+    else if (l.trim()) out.push(`<p>${inline(l)}</p>`);
+  }
+  return out.join('\n');
+}
+async function docsPage() {
+  const res = await fetch(`${BASE}/docs.md`);
+  const md = await res.text();
+  const link = `${location.origin}${BASE}/docs.md`;
+  $('#view').innerHTML = `<div class="head"><h1>תיעוד מבנה המשימה</h1><div class="row">
+      <button class="btn" id="d-copy">העתקת המדריך</button>
+      <a class="btn primary" href="${BASE}/docs.md?download=1" download="scheduler-task-format.md">הורדת הקובץ (MD)</a></div></div>
+    <div class="card" style="margin-bottom:16px;background:var(--accent-soft);border-color:transparent">
+      <b>איך להשתמש עם AI:</b> מורידים את הקובץ (או מעתיקים), נותנים אותו ל-AI, וכותבים מה המשימה צריכה לעשות.
+      את ה-JSON שמתקבל מדביקים ב"הדבקת JSON" ברשימת המשימות, ולוחצים "בדיקה עכשיו" לפני השמירה.
+      <div class="small" style="margin-top:6px">קישור ישיר למדריך: <code class="ltr">${esc(link)}</code> <button class="btn sm ghost" id="d-link">העתקת הקישור</button></div>
+    </div>
+    <div class="card md">${mdToHtml(md)}</div>`;
+  $('#d-copy').onclick = () => { navigator.clipboard?.writeText(md); toast('המדריך הועתק'); };
+  $('#d-link').onclick = () => { navigator.clipboard?.writeText(link); toast('הקישור הועתק'); };
 }
 
 // ---------- התחלה ----------

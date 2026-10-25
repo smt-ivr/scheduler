@@ -4,6 +4,7 @@ import { handleApi } from './api.js';
 import { isAuthenticated, login, logout } from './auth.js';
 import { tick } from './runner.js';
 import page from './admin.html';
+import taskFormat from './task-format.md';
 
 const SECURITY_HEADERS = { 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'same-origin' };
 
@@ -20,6 +21,12 @@ async function route(request, env, ctx) {
   }
 
   if (path === '/health') return new Response('ok');
+  // מדריך מבנה ה-JSON - פתוח לכולם (אין בו מידע רגיש), כדי שאפשר יהיה לתת את הקישור ל-AI
+  if (path === '/docs.md') {
+    const headers = { 'Content-Type': 'text/markdown; charset=utf-8', 'Cache-Control': 'no-cache' };
+    if (url.searchParams.has('download')) headers['Content-Disposition'] = 'attachment; filename="scheduler-task-format.md"';
+    return new Response(taskFormat, { headers });
+  }
   if (path === '/' || path === '/index.html') {
     return new Response(page.replace('__BASE_PATH__', base.replace(/[^A-Za-z0-9/_-]/g, '')), {
       headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
