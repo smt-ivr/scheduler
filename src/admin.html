@@ -315,9 +315,9 @@ async function runNow(id, btn) {
 const isSimple = (r) => (r.when === 'success' || r.when === 'failure') && !(r.if || []).length && !r.stop;
 const SIMPLE_MAIL = {
   success: () => ({ name: 'מייל כשהצליח', when: 'success', match: 'all', if: [], stop: false,
-    email: { to: [], cc: [], subject: 'המשימה "{{task}}" הצליחה', body: 'שלום,\n\nהמשימה "{{task}}" הסתיימה בהצלחה.\nתאריך: {{hebrew_date}} ({{date}}) בשעה {{time}}', html: false } }),
+    email: { to: [], cc: [], subject: 'בוצע בהצלחה: {{task}}', body: 'שלום רב,\n\nרצינו לעדכן שהפעולה "{{task}}" בוצעה בהצלחה היום, {{hebrew_date}}, בשעה {{time}}.\n\nאין צורך לעשות דבר.\n\nבברכה', html: false } }),
   failure: () => ({ name: 'מייל כשנכשל', when: 'failure', match: 'all', if: [], stop: false,
-    email: { to: [], cc: [], subject: 'המשימה "{{task}}" נכשלה', body: 'שלום,\n\nהמשימה "{{task}}" לא הצליחה.\nסיבה: {{error}}\nתאריך: {{hebrew_date}} ({{date}}) בשעה {{time}}\n\nתחילת התשובה:\n{{response}}', html: false } }),
+    email: { to: [], cc: [], subject: 'לא הצליח: {{task}}', body: 'שלום רב,\n\nהפעולה "{{task}}" לא הצליחה היום, {{hebrew_date}}, בשעה {{time}}.\n\nכדאי לבדוק את הנושא או לפנות לאחראי על המערכת.\n\nבברכה', html: false } }),
 };
 const EXAMPLES = [
   { title: 'משימה ריקה', desc: 'מתחילים מאפס', config: null },
