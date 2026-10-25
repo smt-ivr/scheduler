@@ -1,0 +1,73 @@
+{
+  "name": "בדיקת מנויים - ראש חודש",
+  "enabled": true,
+  "schedule": {
+    "type": "monthly",
+    "calendar": "hebrew",
+    "day": 1,
+    "times": ["08:00"]
+  },
+  "request": {
+    "method": "POST",
+    "url": "https://api.example.com/v1/subscriptions/check",
+    "headers": {
+      "Authorization": "Bearer YOUR_API_KEY",
+      "Accept": "application/json"
+    },
+    "body": {
+      "date": "{{date}}",
+      "hebrew_date": "{{hebrew_date}}"
+    },
+    "timeout_seconds": 30,
+    "retries": 2
+  },
+  "success": {
+    "status": "200-299",
+    "error_words": ["\"success\":false", "error", "שגיאה"],
+    "must_contain": []
+  },
+  "rules": [
+    {
+      "name": "חריגה - רק למנהל",
+      "when": "success",
+      "if": [{ "field": "json:data.overdue", "op": "gt", "value": "0" }],
+      "match": "all",
+      "email": {
+        "to": ["manager@your-domain.com"],
+        "cc": [],
+        "subject": "{{json:data.overdue}} מנויים בפיגור - {{hebrew_date}}",
+        "body": "שלום,\n\nבבדיקת ראש חודש ({{hebrew_date}}) נמצאו {{json:data.overdue}} מנויים בפיגור.\nסך הכל מנויים: {{json:data.total}}\n\nבברכה,\nמתזמן המשימות",
+        "html": false
+      },
+      "stop": true
+    },
+    {
+      "name": "הכל תקין - לצוות",
+      "when": "success",
+      "if": [],
+      "match": "all",
+      "email": {
+        "to": ["team@your-domain.com", "office@your-domain.com"],
+        "cc": [],
+        "subject": "בדיקת מנויים {{hebrew_date}}: הכל תקין",
+        "body": "הבדיקה הושלמה. {{json:data.total}} מנויים, אין חריגות.",
+        "html": false
+      },
+      "stop": false
+    },
+    {
+      "name": "שגיאה - למשרד",
+      "when": "failure",
+      "if": [],
+      "match": "all",
+      "email": {
+        "to": ["office@your-domain.com"],
+        "cc": [],
+        "subject": "בדיקת המנויים נכשלה",
+        "body": "הבדיקה של {{date}} נכשלה.\nסיבה: {{error}}\nקוד: {{status}}\n\nתחילת התגובה:\n{{response}}",
+        "html": false
+      },
+      "stop": false
+    }
+  ]
+}
