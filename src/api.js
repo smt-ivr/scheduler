@@ -512,7 +512,7 @@ async function sendManualEmail(env, request) {
   return json({ ok: true, id: r.id });
 }
 
-async function settingsInfo(env, request) {
+async function settingsInfo(env, request, base = '') {
   const settings = await getSettings(env.DB);
   const origin = new URL(request.url).origin;
   return json({
@@ -521,12 +521,12 @@ async function settingsInfo(env, request) {
     variables: TEMPLATE_VARIABLES,
     resend_configured: Boolean(env.RESEND_API_KEY),
     webhook_configured: Boolean(env.RESEND_WEBHOOK_SECRET),
-    resend_webhook_url: `${origin}/webhooks/resend`,
+    resend_webhook_url: `${origin}${base}/webhooks/resend`,
     timezone: 'Asia/Jerusalem',
   });
 }
 
-async function updateSettings(env, request) {
+async function updateSettings(env, request, base = '') {
   const body = await readJson(request);
   const errors = {};
   const out = {};
@@ -548,7 +548,7 @@ async function updateSettings(env, request) {
   if (Object.keys(errors).length) return fail('יש שגיאות בהגדרות', 422, { fields: errors });
   await saveSettings(env.DB, out);
   await audit(env, request, 'settings.update', null, Object.keys(out).join(', '));
-  return settingsInfo(env, request);
+  return settingsInfo(env, request, base);
 }
 
 async function exportTasks(env, request) {
@@ -599,8 +599,8 @@ async function listAudit(env, url) {
 
 // ---------- ניתוב ----------
 
-export async function handleApi(request, env, ctx, url) {
-  const p = url.pathname.replace(/^\/api/, '');
+export async function handleApi(request, env, ctx, url, path, base = '') {
+  const p = path.replace(/^\/api/, '');
   const m = request.method;
   let match;
 
@@ -639,8 +639,8 @@ export async function handleApi(request, env, ctx, url) {
   if (p === '/emails' && m === 'GET') return listEmails(env, url);
   if (p === '/emails/send' && m === 'POST') return sendManualEmail(env, request);
   if ((match = /^\/emails\/(\d+)$/.exec(p)) && m === 'GET') return getEmail(env, Number(match[1]));
-  if (p === '/settings' && m === 'GET') return settingsInfo(env, request);
-  if (p === '/settings' && m === 'PUT') return updateSettings(env, request);
+  if (p === '/settings' && m === 'GET') return settingsInfo(env, request, base);
+  if (p === '/settings' && m === 'PUT') return updateSettings(env, request, base);
   if (p === '/export' && m === 'GET') return exportTasks(env, request);
   if (p === '/import' && m === 'POST') return importTasks(env, request);
   if (p === '/audit' && m === 'GET') return listAudit(env, url);

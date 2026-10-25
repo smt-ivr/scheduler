@@ -102,9 +102,11 @@ npx wrangler deploy
 
 בסיום תתקבל כתובת בסגנון `https://scheduler.<your-subdomain>.workers.dev`. זו כתובת ממשק הניהול.
 
+**חיבור לדומיין תחת נתיב** (למשל `https://smti.uk/scheduler`): ב-Cloudflare מוסיפים ל-Worker את ה-Route `smti.uk/scheduler*`. הנתיב מוגדר ב-`wrangler.toml` בשדה `BASE_PATH`, וכל הכתובות של הממשק מקבלות אותו כקידומת, כולל `/scheduler/webhooks/resend`.
+
 ### 5. מעקב מסירת מיילים (רשות, מומלץ)
 
-1. ב-Resend: **Webhooks** ← **Add Endpoint**. הכתובת היא `https://scheduler.<your-subdomain>.workers.dev/webhooks/resend`, ובוחרים את כל אירועי `email.*`.
+1. ב-Resend: **Webhooks** ← **Add Endpoint**. הכתובת היא `https://smti.uk/scheduler/webhooks/resend` (או `https://scheduler.<your-subdomain>.workers.dev/webhooks/resend`), ובוחרים את כל אירועי `email.*`.
 2. מעתיקים את ה-Signing Secret (`whsec_...`) ושומרים אותו כסוד:
    ```bash
    npx wrangler secret put RESEND_WEBHOOK_SECRET

@@ -16,5 +16,10 @@ migrations_dir = "migrations"
 # כדי לא לכתוב לטבלה שאינה scheduler_, טבלת המעקב אחרי ה-migrations מקבלת קידומת.
 migrations_table = "scheduler_migrations"
 
+# נתיב הבסיס כשה-Worker מחובר לדומיין תחת נתיב (Route: smti.uk/scheduler*).
+# בכתובת workers.dev הממשק ממשיך לעבוד גם מהשורש.
+[vars]
+BASE_PATH = "/scheduler"
+
 [observability]
 enabled = true

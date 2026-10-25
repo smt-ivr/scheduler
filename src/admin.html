@@ -237,6 +237,8 @@ const $ = (sel, el = document) => el.querySelector(sel);
 const $$ = (sel, el = document) => [...el.querySelectorAll(sel)];
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const TZ = 'Asia/Jerusalem';
+// נתיב הבסיס שבו הממשק מותקן (למשל /scheduler); השרת מחליף את הערך בהגשת הדף
+const BASE = '__BASE_PATH__';
 const dtf = new Intl.DateTimeFormat('he-IL', { timeZone: TZ, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
 const dtfShort = new Intl.DateTimeFormat('he-IL', { timeZone: TZ, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 const dayFmt = new Intl.DateTimeFormat('he-IL', { timeZone: TZ, weekday: 'long' });
@@ -285,7 +287,7 @@ class ApiError extends Error {
 async function api(method, path, body) {
   const opts = { method, headers: { 'X-Requested-With': 'scheduler' }, credentials: 'same-origin' };
   if (body !== undefined) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
-  const res = await fetch(`/api${path}`, opts);
+  const res = await fetch(`${BASE}/api${path}`, opts);
   let data = null;
   try { data = await res.json(); } catch {}
   if (res.status === 401 && path !== '/login') { showLogin(); throw new ApiError('נדרשת התחברות', 401, data); }
@@ -481,7 +483,7 @@ async function viewTasks(params) {
   const selected = new Set();
   $('#view').innerHTML = `
     <div class="page-head"><div><h1>משימות</h1><div class="sub" id="tasks-count"></div></div>
-      <div class="row"><a class="btn" href="/api/export" download>ייצוא</a><a class="btn btn-primary" href="#/tasks/new">${icon('plus')}משימה חדשה</a></div></div>
+      <div class="row"><a class="btn" href="${BASE}/api/export" download>ייצוא</a><a class="btn btn-primary" href="#/tasks/new">${icon('plus')}משימה חדשה</a></div></div>
     <div class="card" style="margin-bottom:12px"><div class="card-pad row" style="padding:12px">
       <input type="search" id="f-q" placeholder="חיפוש לפי שם, כתובת או תגית" style="max-width:320px" value="${esc(filters.q)}">
       <select id="f-status" style="width:auto"><option value="">כל המצבים</option><option value="active">פעילות</option><option value="disabled">מושבתות</option><option value="failing">נכשלות</option><option value="running">רצות כעת</option></select>
@@ -1211,7 +1213,7 @@ async function viewSettings() {
       <div><button class="btn btn-primary" type="submit">שמירת הגדרות</button></div>
       <div class="card card-pad">
         <h2>גיבוי ושחזור משימות</h2>
-        <div class="row"><a class="btn" href="/api/export" download>ייצוא כל המשימות (JSON)</a>
+        <div class="row"><a class="btn" href="${BASE}/api/export" download>ייצוא כל המשימות (JSON)</a>
           <label class="btn">ייבוא מקובץ<input type="file" id="import-file" accept="application/json,.json" class="hidden"></label></div>
         <div class="help">ייבוא מוסיף משימות חדשות ולא דורס משימות קיימות. משימה חד-פעמית שמועדה עבר מיובאת מושבתת.</div>
       </div>

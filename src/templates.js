@@ -4,7 +4,7 @@
 import { formatDate, formatDateTime } from './time.js';
 
 // סודות של המערכת עצמה - אי אפשר להפנות אליהם מתוך משימה
-export const RESERVED_SECRETS = new Set(['ADMIN_PASSWORD', 'RESEND_API_KEY', 'RESEND_WEBHOOK_SECRET', 'RESEND_API_URL']);
+export const RESERVED_SECRETS = new Set(['ADMIN_PASSWORD', 'RESEND_API_KEY', 'RESEND_WEBHOOK_SECRET', 'RESEND_API_URL', 'BASE_PATH']);
 
 export class TemplateError extends Error {}
 

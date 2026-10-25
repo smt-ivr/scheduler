@@ -21,13 +21,22 @@ function withHeaders(res, extra = {}) {
 
 async function route(request, env, ctx) {
   const url = new URL(request.url);
-  const path = url.pathname;
+  // תמיכה בהתקנה תחת נתיב, למשל https://example.com/scheduler (BASE_PATH ב-wrangler.toml).
+  // בכתובת workers.dev, בלי הקידומת, הכל עובד גם מהשורש.
+  const basePath = String(env.BASE_PATH || '').replace(/\/+$/, '');
+  let path = url.pathname;
+  let base = '';
+  if (basePath && (path === basePath || path.startsWith(`${basePath}/`))) {
+    if (path === basePath) return Response.redirect(`${url.origin}${basePath}/${url.search}`, 301);
+    base = basePath;
+    path = path.slice(basePath.length);
+  }
 
   if (path === '/health') return new Response('ok');
   if (path === '/webhooks/resend' && request.method === 'POST') return handleResendWebhook(request, env);
 
   if (path === '/' || path === '/index.html') {
-    return new Response(renderAdminPage(), {
+    return new Response(renderAdminPage(base), {
       headers: {
         'Content-Type': 'text/html; charset=utf-8',
         'Cache-Control': 'no-store',
@@ -51,7 +60,7 @@ async function route(request, env, ctx) {
         (async () => {
           await audit(env, request, 'login.success');
           const settings = await getSettings(env.DB);
-          if (settings.public_url !== url.origin) await saveSettings(env.DB, { public_url: url.origin });
+          if (settings.public_url !== url.origin + base) await saveSettings(env.DB, { public_url: url.origin + base });
         })().catch((e) => console.error(e))
       );
     } else if (res.status === 401) {
@@ -63,7 +72,7 @@ async function route(request, env, ctx) {
 
   if (!(await isAuthenticated(request, env))) return Response.json({ error: 'נדרשת התחברות' }, { status: 401 });
   if (path === '/api/me') return Response.json({ ok: true });
-  return handleApi(request, env, ctx, url);
+  return handleApi(request, env, ctx, url, path, base);
 }
 
 export default {
