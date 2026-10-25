@@ -133,6 +133,7 @@ export async function maintenance(db, settings, now = Date.now()) {
     del('scheduler_runs', 'started_at', cutoff),
     del('scheduler_emails', 'created_at', cutoff),
     del('scheduler_email_events', 'received_at', cutoff),
+    del('scheduler_action_log', 'created_at', cutoff),
     del('scheduler_audit', 'at', now - 90 * 86_400_000),
     del('scheduler_login_attempts', 'at', now - 86_400_000),
   ]);

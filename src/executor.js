@@ -3,6 +3,7 @@
 import { createContext, render, redact, TemplateError } from './templates.js';
 import { sendEmail, recordEmail, splitAddresses, isValidAddress } from './resend.js';
 import { formatDateTime } from './time.js';
+import { contentError, makeResponse, parseStoredRules, selectActions } from './rules.js';
 
 const SNIPPET_CHARS = 1000;
 const BODY_CHECK_BYTES = 64 * 1024;
@@ -82,7 +83,7 @@ export function buildHttpRequest(task, ctx) {
 }
 
 /** בונה הודעת מייל מוכנה לשליחה */
-export function buildEmail(task, ctx, settings) {
+export function buildEmail(task, ctx, settings, { htmlEscape = false } = {}) {
   const from = render(task.email_from || settings.default_from_email || '', ctx).trim();
   const list = (s) => splitAddresses(render(s || '', ctx));
   const msg = {
@@ -92,7 +93,7 @@ export function buildEmail(task, ctx, settings) {
     bcc: list(task.email_bcc),
     reply_to: list(task.email_reply_to),
     subject: render(task.email_subject || '', ctx),
-    html: render(task.email_html || '', ctx),
+    html: render(task.email_html || '', ctx, { html: htmlEscape }),
     text: render(task.email_text || '', ctx),
     tags: [
       { name: 'source', value: 'scheduler' },
@@ -115,7 +116,7 @@ function describeError(e, timeoutMs) {
   return e?.message || String(e);
 }
 
-async function attemptHttp(req, task, timeoutMs) {
+async function attemptHttp(req, task, timeoutMs, rules) {
   const res = await fetch(req.url, {
     method: req.method,
     headers: req.headers,
@@ -124,13 +125,25 @@ async function attemptHttp(req, task, timeoutMs) {
     signal: AbortSignal.timeout(timeoutMs),
   });
   const text = await readBody(res);
+  const headers = Object.fromEntries(res.headers);
   let error = null;
+  let isContentError = false;
   if (!statusMatches(res.status, task.expect_status)) {
     error = `קוד תגובה ${res.status} אינו בטווח המצופה (${task.expect_status || '200-299'})`;
   } else if (task.expect_body && !text.includes(task.expect_body)) {
     error = `גוף התגובה לא מכיל את הטקסט "${task.expect_body}"`;
+    isContentError = true;
+  } else {
+    // שרתים שמחזירים 200 גם על שגיאה: בודקים מילים ותנאים בתוכן
+    error = contentError(rules, makeResponse({ status: res.status, body: text, headers }));
+    isContentError = Boolean(error);
   }
-  return { ok: !error, status: res.status, text, error };
+  return { ok: !error, status: res.status, text, headers, error, contentError: isContentError };
+}
+
+export async function loadRules(db, taskId) {
+  const row = await db.prepare('SELECT rules FROM scheduler_task_rules WHERE task_id = ?').bind(taskId).first();
+  return parseStoredRules(row?.rules);
 }
 
 /**
@@ -148,6 +161,7 @@ export async function executeTask(env, task, settings, { trigger, lockToken, sch
     .bind(task.id, task.name, trigger, scheduledFor, startedAt)
     .run();
   const runId = ins.meta.last_row_id;
+  const rules = await loadRules(db, task.id);
 
   const ctx = createContext(env, { now: startedAt, task, runId });
   const timeoutMs = Math.min(Math.max(Number(task.timeout_ms) || 30000, 1000), 120000);
@@ -179,7 +193,7 @@ export async function executeTask(env, task, settings, { trigger, lockToken, sch
           r = { ok: sent.ok, status: sent.status, text: sent.body || '', error: sent.ok ? null : sent.error };
           if (sent.ok) messageId = sent.id;
         } else {
-          r = await attemptHttp(req, task, timeoutMs);
+          r = await attemptHttp(req, task, timeoutMs, rules);
         }
       } catch (e) {
         r = { ok: false, status: null, text: '', error: describeError(e, timeoutMs) };
@@ -187,6 +201,7 @@ export async function executeTask(env, task, settings, { trigger, lockToken, sch
       attempts.push({ attempt, at: t0, duration_ms: Date.now() - t0, status: r.status, error: r.error ? redact(r.error, ctx) : null });
       final = r;
       if (r.ok) break;
+      if (r.contentError && rules.no_retry_on_content_error) break;
       if (attempt < maxAttempts) await sleep(baseDelay * 2 ** (attempt - 1));
     }
   } catch (e) {
@@ -269,7 +284,91 @@ export async function executeTask(env, task, settings, { trigger, lockToken, sch
   } catch (e) {
     console.error('notification failed', e);
   }
+
+  if (rules.actions.length) {
+    await runActions(env, settings, task, rules, run, final).catch((e) => console.error('actions failed', e));
+  }
   return run;
+}
+
+// ---------- פעולות מותנות אחרי ריצה ----------
+
+async function logAction(db, run, task, action, status, detail) {
+  await db
+    .prepare(
+      `INSERT INTO scheduler_action_log (run_id, task_id, action_name, action_type, status, detail, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    )
+    .bind(run.id, task.id, action.name, action.type, status, detail ? String(detail).slice(0, 2000) : null, Date.now())
+    .run();
+}
+
+/** מריץ את הפעולות שהתנאים שלהן מתקיימים, לפי הסדר, ושומר כל אחת ביומן */
+export async function runActions(env, settings, task, rules, run, final) {
+  const response = makeResponse({ status: final.status, body: final.text || '', headers: final.headers || {} });
+  const selected = selectActions(rules, run.status, response).filter((s) => s.run);
+  const base = (settings.public_url || '').replace(/\/$/, '');
+  for (const { action, index } of selected) {
+    const ctx = createContext(env, { now: run.started_at, task, runId: run.id });
+    ctx.result = {
+      outcome: run.status,
+      response,
+      error: run.error,
+      attempts: run.attempts,
+      duration_ms: run.duration_ms,
+      run_url: base ? `${base}/#/runs/${run.id}` : '',
+    };
+    try {
+      if (action.type === 'email') {
+        const e = action.email;
+        const msg = buildEmail(
+          {
+            id: task.id,
+            email_from: e.from,
+            email_to: e.to,
+            email_cc: e.cc,
+            email_bcc: e.bcc,
+            email_subject: e.subject,
+            email_html: e.html,
+            email_text: e.text,
+          },
+          ctx,
+          settings,
+          { htmlEscape: true }
+        );
+        msg.tags = [
+          { name: 'source', value: 'scheduler_action' },
+          { name: 'task_id', value: String(task.id) },
+        ];
+        const sent = await sendEmail(env, msg, { idempotencyKey: `scheduler-run-${run.id}-action-${index}` });
+        if (!sent.ok) throw new Error(`Resend: ${sent.error}`);
+        const to = [...msg.to, ...msg.cc, ...msg.bcc];
+        await recordEmail(env.DB, { messageId: sent.id, taskId: task.id, runId: run.id, source: 'notification', from: msg.from, to, subject: msg.subject });
+        await logAction(env.DB, run, task, action, 'success', redact(`נשלח מייל אל ${to.join(', ')} | נושא: ${msg.subject}`, ctx));
+      } else {
+        const w = action.webhook;
+        const url = render(w.url, ctx);
+        const headers = {};
+        for (const [k, v] of Object.entries(JSON.parse(w.headers || '{}'))) headers[k] = render(String(v), ctx);
+        const body = w.method === 'GET' ? undefined : render(w.body, ctx) || undefined;
+        if (body && !Object.keys(headers).some((k) => k.toLowerCase() === 'content-type')) {
+          try {
+            JSON.parse(body);
+            headers['Content-Type'] = 'application/json';
+          } catch {
+            headers['Content-Type'] = 'text/plain; charset=utf-8';
+          }
+        }
+        const res = await fetch(url, { method: w.method, headers, body, signal: AbortSignal.timeout(15000) });
+        const text = (await res.text()).slice(0, 300);
+        const detail = redact(`${w.method} ${url} → ${res.status}${text ? ` | ${text}` : ''}`, ctx);
+        await logAction(env.DB, run, task, action, res.ok ? 'success' : 'failure', detail);
+      }
+    } catch (err) {
+      const msg = err instanceof ConfigError || err instanceof TemplateError ? err.message : describeError(err, 15000);
+      await logAction(env.DB, run, task, action, 'failure', redact(msg, ctx)).catch(() => {});
+    }
+  }
 }
 
 // ---------- התראות ----------

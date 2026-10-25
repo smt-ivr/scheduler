@@ -2,13 +2,14 @@
 // ערכי סודות נאספים כדי להסתיר אותם (***) בכל מה שנשמר ביומן.
 
 import { formatDate, formatDateTime } from './time.js';
+import { getPath } from './rules.js';
 
 // סודות של המערכת עצמה - אי אפשר להפנות אליהם מתוך משימה
 export const RESERVED_SECRETS = new Set(['ADMIN_PASSWORD', 'RESEND_API_KEY', 'RESEND_WEBHOOK_SECRET', 'RESEND_API_URL', 'BASE_PATH']);
 
 export class TemplateError extends Error {}
 
-const PATTERN = /\{\{\s*([a-z_]+)(?::([A-Za-z0-9_+-]+))?\s*\}\}/g;
+const PATTERN = /\{\{\s*([a-z_]+)(?::([^{}]+?))?\s*\}\}/g;
 
 export const TEMPLATE_VARIABLES = [
   { name: '{{secret:NAME}}', desc: 'ערך של Worker secret בשם NAME (לא נשמר ולא מוצג)' },
@@ -24,6 +25,23 @@ export const TEMPLATE_VARIABLES = [
   { name: '{{run_id}}', desc: 'מזהה הריצה' },
 ];
 
+// משתנים שזמינים רק בפעולות שאחרי הריצה (מיילים ו-webhooks מותנים)
+export const RESULT_VARIABLES = [
+  { name: '{{result}}', desc: 'תוצאת הריצה: "הצליחה" או "נכשלה"' },
+  { name: '{{status_code}}', desc: 'קוד התגובה (למשל 200)' },
+  { name: '{{response}}', desc: 'תחילת גוף התגובה (עד 2000 תווים)' },
+  { name: '{{json:data.status}}', desc: 'ערך של שדה מתוך תגובת JSON' },
+  { name: '{{header:content-type}}', desc: 'ערך של כותרת מהתגובה' },
+  { name: '{{error}}', desc: 'הודעת השגיאה, אם הייתה' },
+  { name: '{{attempts}}', desc: 'מספר הניסיונות' },
+  { name: '{{duration_ms}}', desc: 'משך הריצה במילישניות' },
+  { name: '{{run_url}}', desc: 'קישור לפרטי הריצה בממשק' },
+];
+
+const escapeHtml = (s) =>
+  String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const asText = (v) => (v == null ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v));
+
 /**
  * יוצר הקשר להחלפה. כל ההחלפות באותה ריצה משתמשות באותו "עכשיו",
  * כך שגם בניסיון חוזר הערכים זהים.
@@ -32,9 +50,37 @@ export function createContext(env, { now = Date.now(), task = {}, runId = '' } =
   return { env, now, task, runId, secrets: new Set(), maskSecrets: false };
 }
 
-export function render(text, ctx) {
+/**
+ * opts.html: הערכים שמגיעים מהתגובה עוברים escape, כדי שתוכן מ-API חיצוני לא ישתול HTML במייל.
+ */
+export function render(text, ctx, opts = {}) {
   if (text == null || text === '') return text ?? '';
+  const out = (v) => (opts.html ? escapeHtml(asText(v)) : asText(v));
   return String(text).replace(PATTERN, (whole, name, arg) => {
+    // משתני תוצאה - רק כשיש תגובה בהקשר
+    const r = ctx.result;
+    if (r) {
+      switch (name) {
+        case 'result':
+          return r.outcome === 'success' ? 'הצליחה' : 'נכשלה';
+        case 'status_code':
+          return out(r.response.status ?? '');
+        case 'response':
+          return out(r.response.body.slice(0, 2000));
+        case 'json':
+          return out(getPath(r.response.json, arg));
+        case 'header':
+          return out(r.response.headers[String(arg || '').toLowerCase()]);
+        case 'error':
+          return out(r.error || '');
+        case 'attempts':
+          return String(r.attempts ?? '');
+        case 'duration_ms':
+          return String(r.duration_ms ?? '');
+        case 'run_url':
+          return out(r.run_url || '');
+      }
+    }
     switch (name) {
       case 'secret': {
         if (!arg) throw new TemplateError('חסר שם סוד ב-{{secret:NAME}}');
@@ -62,7 +108,7 @@ export function render(text, ctx) {
       case 'task_id':
         return String(ctx.task.id ?? '');
       case 'task_name':
-        return String(ctx.task.name ?? '');
+        return out(ctx.task.name ?? '');
       case 'run_id':
         return String(ctx.runId ?? '');
       default:

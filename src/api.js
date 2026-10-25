@@ -8,6 +8,9 @@ import { getSettings, saveSettings, DEFAULT_SETTINGS } from './settings.js';
 import { createContext, listSecretNames, TEMPLATE_VARIABLES } from './templates.js';
 import { sendEmail, recordEmail, splitAddresses, isValidAddress } from './resend.js';
 import { clientIp } from './auth.js';
+import { normalizeRules, parseStoredRules, makeResponse, contentError, selectActions, SOURCES, OPS, WHEN } from './rules.js';
+import { statusMatches, loadRules } from './executor.js';
+import { RESULT_VARIABLES, render } from './templates.js';
 
 const json = (data, status = 200) => Response.json(data, { status });
 const fail = (error, status = 400, extra = {}) => json({ error, ...extra }, status);
@@ -126,6 +129,13 @@ export function normalizeTask(input, { now = Date.now() } = {}) {
   const badNotify = splitAddresses(v.notify_email).find((a) => !isValidAddress(a));
   if (badNotify) errors.notify_email = `כתובת לא תקינה: ${badNotify}`;
 
+  const { rules, errors: ruleErrors } = normalizeRules(input.rules, {
+    isUrlLike: (s) => isUrlLike(s),
+    badAddress: (s) => splitAddresses(s).find((a) => !a.includes('{{') && !isValidAddress(a)),
+  });
+  v.rules = rules;
+  Object.assign(errors, ruleErrors);
+
   return { values: v, errors };
 }
 
@@ -153,7 +163,18 @@ function presentTask(t, { pending = null, dates = null } = {}) {
 
 async function fullTask(db, id) {
   const t = await getTask(db, id);
-  return t ? presentTask(t, { dates: await getTaskDates(db, id) }) : null;
+  if (!t) return null;
+  const [dates, rules] = await Promise.all([getTaskDates(db, id), loadRules(db, id)]);
+  return { ...presentTask(t, { dates }), rules };
+}
+
+function saveRulesStatement(db, taskId, rules) {
+  return db
+    .prepare(
+      `INSERT INTO scheduler_task_rules (task_id, rules, updated_at) VALUES (?, ?, ?)
+       ON CONFLICT(task_id) DO UPDATE SET rules = excluded.rules, updated_at = excluded.updated_at`
+    )
+    .bind(taskId, JSON.stringify(rules), Date.now());
 }
 
 async function getTaskDates(db, taskId) {
@@ -197,7 +218,10 @@ async function insertTask(db, v, now = Date.now()) {
     .bind(...vals)
     .run();
   const id = res.meta.last_row_id;
-  if (v.schedule_type === 'once' && v.run_dates?.length) await db.batch(saveDatesStatements(db, id, v.run_dates));
+  const extra = [];
+  if (v.schedule_type === 'once' && v.run_dates?.length) extra.push(...saveDatesStatements(db, id, v.run_dates));
+  if (v.rules) extra.push(saveRulesStatement(db, id, v.rules));
+  if (extra.length) await db.batch(extra);
   return id;
 }
 
@@ -314,6 +338,7 @@ async function updateTask(env, request, id) {
       .prepare(`UPDATE scheduler_tasks SET ${sets}, next_run_at = ?, updated_at = ? WHERE id = ?`)
       .bind(...CONFIG_FIELDS.map((f) => values[f] ?? null), next, now, id),
     ...saveDatesStatements(db, id, values.schedule_type === 'once' ? values.run_dates : []),
+    saveRulesStatement(db, id, values.rules),
   ]);
   await audit(env, request, 'task.update', id, values.name);
   return json({ task: await fullTask(db, id) });
@@ -327,6 +352,8 @@ async function deleteTask(env, request, id) {
     db.prepare('DELETE FROM scheduler_tasks WHERE id = ?').bind(id),
     db.prepare('DELETE FROM scheduler_runs WHERE task_id = ?').bind(id),
     db.prepare('DELETE FROM scheduler_task_dates WHERE task_id = ?').bind(id),
+    db.prepare('DELETE FROM scheduler_task_rules WHERE task_id = ?').bind(id),
+    db.prepare('DELETE FROM scheduler_action_log WHERE task_id = ?').bind(id),
   ]);
   await audit(env, request, 'task.delete', id, t.name);
   return json({ ok: true });
@@ -362,6 +389,7 @@ async function duplicateTask(env, request, id) {
   const copy = Object.fromEntries(CONFIG_FIELDS.map((f) => [f, t[f]]));
   copy.name = `${t.name} (עותק)`;
   copy.enabled = 0;
+  copy.rules = await loadRules(env.DB, id);
   if (t.schedule_type === 'once') {
     copy.run_dates = (await getTaskDates(env.DB, id)).filter((d) => d.ran_at == null && d.run_at > Date.now()).map((d) => d.run_at);
   }
@@ -488,7 +516,11 @@ async function getRun(env, id) {
   }
   let email = null;
   if (run.email_message_id) email = await env.DB.prepare('SELECT * FROM scheduler_emails WHERE message_id = ?').bind(run.email_message_id).first();
-  return json({ run, email });
+  const { results: actions } = await env.DB
+    .prepare('SELECT action_name, action_type, status, detail, created_at FROM scheduler_action_log WHERE run_id = ? ORDER BY id')
+    .bind(id)
+    .all();
+  return json({ run, email, actions });
 }
 
 async function listEmails(env, url) {
@@ -619,6 +651,8 @@ async function exportTasks(env, request) {
     .all();
   const datesByTask = new Map();
   for (const r of dateRows) datesByTask.set(r.task_id, [...(datesByTask.get(r.task_id) || []), formatLocalInput(r.run_at)]);
+  const { results: ruleRows } = await env.DB.prepare('SELECT task_id, rules FROM scheduler_task_rules').all();
+  const rulesByTask = new Map(ruleRows.map((r) => [r.task_id, parseStoredRules(r.rules)]));
   await audit(env, request, 'tasks.export', null, `${results.length} משימות`);
   return new Response(
     JSON.stringify(
@@ -629,6 +663,7 @@ async function exportTasks(env, request) {
         tasks: results.map((t) => ({
           ...Object.fromEntries(CONFIG_FIELDS.filter((f) => f !== 'run_at').map((f) => [f, t[f]])),
           run_dates_local: t.schedule_type === 'once' ? datesByTask.get(t.id) || [] : undefined,
+          rules: rulesByTask.get(t.id),
         })),
       },
       null,
@@ -657,6 +692,59 @@ async function importTasks(env, request) {
   }
   await audit(env, request, 'tasks.import', null, `נוצרו ${created.length}, נכשלו ${failed.length}`);
   return json({ created: created.length, failed });
+}
+
+/**
+ * "בדיקת כללים": מריץ את הכללים על תגובה לדוגמה, בלי לשלוח כלום.
+ * מחזיר את התוצאה (הצלחה/כשל), ואילו פעולות היו רצות עם התוכן שהיה נשלח.
+ */
+async function testRules(env, request) {
+  const body = await readJson(request);
+  const { rules, errors } = normalizeRules(body.rules, { isUrlLike });
+  if (Object.keys(errors).length) return fail('יש שגיאות בכללים', 422, { fields: errors });
+  const sample = body.sample || {};
+  const status = Number(sample.status) || 200;
+  let headers = {};
+  try {
+    headers = JSON.parse(sample.headers || '{}');
+  } catch {}
+  const response = makeResponse({ status, body: String(sample.body ?? ''), headers });
+  let error = null;
+  if (!statusMatches(status, body.expect_status)) error = `קוד תגובה ${status} אינו בטווח המצופה (${body.expect_status || '200-299'})`;
+  else if (body.expect_body && !response.body.includes(body.expect_body)) error = `גוף התגובה לא מכיל את הטקסט "${body.expect_body}"`;
+  else error = contentError(rules, response);
+  const outcome = error ? 'failure' : 'success';
+
+  const settings = await getSettings(env.DB);
+  const ctx = createContext(env, { task: { id: body.id || 0, name: body.name || '' }, runId: 'בדיקה' });
+  ctx.maskSecrets = true;
+  ctx.result = { outcome, response, error, attempts: 1, duration_ms: 0, run_url: settings.public_url ? `${settings.public_url}/#/runs/0` : '' };
+  const actions = selectActions(rules, outcome, response).map(({ action, run, reason }) => {
+    const item = { name: action.name, type: action.type, run, reason };
+    if (!run) return item;
+    try {
+      if (action.type === 'email') {
+        const e = action.email;
+        item.preview = {
+          to: render(e.to, ctx),
+          cc: render(e.cc, ctx),
+          subject: render(e.subject, ctx),
+          html: render(e.html, ctx, { html: true }),
+          text: render(e.text, ctx),
+        };
+      } else {
+        item.preview = { method: action.webhook.method, url: render(action.webhook.url, ctx), body: render(action.webhook.body, ctx) };
+      }
+    } catch (err) {
+      item.preview_error = err.message;
+    }
+    return item;
+  });
+  return json({ outcome, error, actions });
+}
+
+function rulesMeta() {
+  return json({ sources: SOURCES, ops: OPS, when: WHEN, result_variables: RESULT_VARIABLES });
 }
 
 async function listAudit(env, url) {
@@ -705,6 +793,8 @@ export async function handleApi(request, env, ctx, url, path, base = '') {
     }
   }
   if (p === '/cron/preview' && m === 'GET') return cronPreview(url);
+  if (p === '/rules/test' && m === 'POST') return testRules(env, request);
+  if (p === '/rules/meta' && m === 'GET') return rulesMeta();
   if (p === '/runs' && m === 'GET') return listRuns(env, url);
   if ((match = /^\/runs\/(\d+)$/.exec(p)) && m === 'GET') return getRun(env, Number(match[1]));
   if (p === '/emails' && m === 'GET') return listEmails(env, url);

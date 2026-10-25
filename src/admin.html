@@ -170,6 +170,17 @@ tr.clickable:hover td { background: var(--panel-2); }
 .days label:has(input:checked) { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
 .kv { display: grid; grid-template-columns: 1fr 1.6fr auto; gap: 6px; margin-bottom: 6px; }
 .var-list { display: flex; flex-direction: column; gap: 6px; }
+.cond { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 6px; }
+.cond select, .cond input { width: auto; flex: 1 1 130px; min-width: 0; }
+.cond .err { flex-basis: 100%; margin: 0; }
+.action-card { border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 12px; background: var(--panel-2); }
+.action-card.off { opacity: .6; }
+.action-head { margin-bottom: 10px; flex-wrap: nowrap; }
+.action-num { width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--accent-text); display: grid; place-items: center; font-weight: 700; font-size: 13px; flex: none; }
+.action-section { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 10px 0 6px; }
+.action-section > b { font-size: 13.5px; min-width: 70px; }
+.alert-ok { background: var(--ok-soft); color: var(--ok); border: 1px solid color-mix(in srgb, var(--ok) 25%, transparent); }
+.var-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px; margin-top: 8px; }
 .var-item { border: 1px solid var(--border); border-radius: 8px; padding: 6px 9px; cursor: pointer; background: var(--panel-2); }
 .var-item:hover { border-color: var(--accent); }
 .var-item code { color: var(--accent); font-weight: 600; }
@@ -734,6 +745,43 @@ async function viewEditor(id) {
           <div class="field"><label class="f" for="email_text">תוכן טקסט פשוט (רשות)</label><textarea id="email_text" rows="4">${esc(task.email_text)}</textarea></div>
         </div>
 
+        <div class="card card-pad" id="detect-card">
+          <h2>זיהוי שגיאה לפי תוכן התגובה</h2>
+          <div class="help" style="margin:-6px 0 12px">לשרתים שעונים 200 גם כשיש שגיאה. אם אחד מהבאים מתקיים, הריצה נחשבת כשל.</div>
+          <div class="field"><label class="f" for="fail_keywords">מילים או ביטויים שמעידים על שגיאה (אחד בכל שורה)</label>
+            <textarea id="fail_keywords" rows="4" class="ltr" placeholder="error&#10;שגיאה&#10;&quot;success&quot;:false"></textarea>
+            <label class="check small" style="margin-top:6px"><input type="checkbox" id="keywords_cs"> הבחנה בין אותיות גדולות לקטנות</label></div>
+          <div class="field"><label class="f">תנאים מתקדמים לשגיאה</label>
+            <div id="fail-conds"></div>
+            <button type="button" class="btn btn-sm" data-cmd="add-fail-cond">${icon('plus')}תנאי</button>
+            <div class="help">מספיק שתנאי אחד יתקיים. דוגמה: שדה JSON <code class="ltr">success</code> שווה ל <code class="ltr">false</code>.</div></div>
+          <label class="check"><input type="checkbox" id="no_retry_content"> כשהשגיאה זוהתה בתוכן התגובה, לא לנסות שוב</label>
+        </div>
+
+        <div class="card card-pad" id="actions-card">
+          <h2>פעולות אחרי הריצה</h2>
+          <div class="help" style="margin:-6px 0 12px">שליחת מייל או קריאה לכתובת, לפי התוצאה ולפי מה שהתגובה מכילה. הפעולות נבדקות לפי הסדר.</div>
+          <div id="actions-list"></div>
+          <div class="row" style="gap:6px;margin-top:4px"><span class="small muted">הוספת פעולה:</span>
+            <button type="button" class="chip" data-cmd="add-action" data-tpl="success">מייל כשהצליח</button>
+            <button type="button" class="chip" data-cmd="add-action" data-tpl="failure">מייל כשנכשל</button>
+            <button type="button" class="chip" data-cmd="add-action" data-tpl="condition">מייל לפי תוכן התגובה</button>
+            <button type="button" class="chip" data-cmd="add-action" data-tpl="webhook">קריאה לכתובת (Webhook)</button>
+          </div>
+          <details style="margin-top:14px"><summary style="cursor:pointer;font-weight:500">משתנים שאפשר לשלב בפעולות</summary>
+            <div class="var-grid" id="result-vars"></div></details>
+        </div>
+
+        <div class="card card-pad" id="tester-card">
+          <h2>בדיקת הכללים</h2>
+          <div class="help">הדבק תגובה לדוגמה כדי לראות אם היא תיחשב הצלחה או כשל ואילו פעולות ירוצו. שום דבר לא נשלח.</div>
+          <div class="row" style="margin:10px 0"><label class="small">קוד תגובה</label><input type="number" id="t-status" value="200" style="width:100px">
+            ${id ? '<span class="spacer"></span><button type="button" class="btn btn-sm btn-ghost" id="t-last">טעינת התגובה מהריצה האחרונה</button>' : ''}</div>
+          <textarea id="t-body" class="ltr" rows="5" placeholder='{"success": false, "message": "Invalid token"}'></textarea>
+          <div class="row" style="margin-top:8px"><button type="button" class="btn" id="t-run">בדיקה</button></div>
+          <div id="t-result" style="margin-top:12px"></div>
+        </div>
+
         <div class="card card-pad">
           <h2>ניסיונות חוזרים והתראות</h2>
           <div class="grid grid-2">
@@ -784,6 +832,8 @@ async function viewEditor(id) {
     setSeg('type-seg', type);
     $('#http-card').classList.toggle('hidden', type !== 'http');
     $('#email-card').classList.toggle('hidden', type !== 'email');
+    $('#detect-card').classList.toggle('hidden', type !== 'http');
+    $('#tester-card').classList.toggle('hidden', type !== 'http');
   }
   function applySched() {
     setSeg('sched-seg', sched);
@@ -986,15 +1036,17 @@ async function viewEditor(id) {
       email_reply_to: $('#email_reply_to').value, email_subject: $('#email_subject').value, email_html: $('#email_html').value, email_text: $('#email_text').value,
       max_attempts: Number($('#max_attempts').value), retry_delay_ms: Math.round(Number($('#retry_delay').value) * 1000), timeout_ms: Math.round(Number($('#timeout').value) * 1000),
       notify_webhook_url: $('#notify_webhook_url').value, notify_email: $('#notify_email').value,
+      rules: collectRules(),
     };
   }
   function showErrors(fields = {}) {
     $$('[data-err]', form).forEach((el) => { el.textContent = fields[el.dataset.err] || ''; });
     $$('.invalid', form).forEach((el) => el.classList.remove('invalid'));
     for (const k of Object.keys(fields)) {
-      const input = k === 'http_headers' ? (headersRaw ? $('#hdr-raw') : null) : $(`#${k}`);
+      const input = k === 'http_headers' ? (headersRaw ? $('#hdr-raw') : null) : /^[a-z_]+$/.test(k) ? $(`#${k}`) : null;
       input?.classList.add('invalid');
     }
+    $$('[data-err]', form).forEach((el) => { if (el.textContent) el.closest('details')?.setAttribute('open', ''); });
     const first = $$('[data-err]', form).find((el) => el.textContent);
     first?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
@@ -1012,7 +1064,7 @@ async function viewEditor(id) {
       else { showErrors(); route(); }
     } catch (err) {
       if (err.data?.fields) showErrors(err.data.fields);
-      toast(err.message, 'bad');
+      toast(err.data?.fields ? `${err.message}: ${Object.values(err.data.fields)[0]}` : err.message, 'bad');
     } finally { btn.disabled = false; }
   });
 
@@ -1048,6 +1100,161 @@ async function viewEditor(id) {
     };
   }
 
+  // ---------- כללים ופעולות ----------
+  if (!state.rulesMeta) state.rulesMeta = await api('GET', '/rules/meta');
+  const META = state.rulesMeta;
+  const rules = JSON.parse(JSON.stringify(task.rules || {}));
+  rules.fail_conditions ||= [];
+  rules.actions ||= [];
+  $('#fail_keywords').value = (rules.fail_keywords || []).join('\n');
+  $('#keywords_cs').checked = !!rules.keywords_case_sensitive;
+  $('#no_retry_content').checked = !!rules.no_retry_on_content_error;
+  $('#result-vars').innerHTML = META.result_variables.map((v) => `<div class="var-item" data-insert="${esc(v.name)}"><code class="ltr">${esc(v.name)}</code><div>${esc(v.desc)}</div></div>`).join('');
+
+  const options = (map, selected) => Object.entries(map).map(([k, l]) => `<option value="${k}" ${k === selected ? 'selected' : ''}>${esc(l)}</option>`).join('');
+  const condRow = (c, path) => `<div class="cond">
+      <select data-bind="${path}.source" data-rerender>${options(META.sources, c.source)}</select>
+      ${c.source === 'json' || c.source === 'header' ? `<input type="text" class="ltr mono" data-bind="${path}.path" value="${esc(c.path || '')}" placeholder="${c.source === 'json' ? 'data.status' : 'content-type'}">` : ''}
+      <select data-bind="${path}.op" data-rerender>${options(META.ops, c.op)}</select>
+      ${c.op === 'exists' || c.op === 'not_exists' ? '' : `<input type="text" data-bind="${path}.value" value="${esc(c.value ?? '')}" placeholder="ערך">`}
+      <button type="button" class="btn btn-sm btn-ghost" data-cmd="del" data-path="${path}" aria-label="הסרת תנאי">✕</button>
+      <div class="err" data-err="rules.${path}"></div></div>`;
+  const fld = (label, path, value, { ltr = false, area = false, rows = 6, ph = '' } = {}) => `<div class="field"><label class="f">${label}</label>
+      ${area ? `<textarea data-bind="${path}" rows="${rows}" class="${ltr ? 'ltr' : ''}" placeholder="${esc(ph)}" spellcheck="false">${esc(value ?? '')}</textarea>` : `<input type="text" data-bind="${path}" class="${ltr ? 'ltr' : ''}" value="${esc(value ?? '')}" placeholder="${esc(ph)}">`}
+      <div class="err" data-err="rules.${path}"></div></div>`;
+  function actionCard(a, i) {
+    const p = `actions.${i}`;
+    const e = a.email || {};
+    const w = a.webhook || {};
+    return `<div class="action-card ${a.enabled === false ? 'off' : ''}">
+      <div class="row action-head">
+        <span class="action-num">${i + 1}</span>
+        <input type="text" data-bind="${p}.name" value="${esc(a.name || '')}" placeholder="שם הפעולה" style="flex:1;min-width:0">
+        <label class="check small" title="פעילה"><span class="switch"><input type="checkbox" data-bind="${p}.enabled" data-rerender ${a.enabled !== false ? 'checked' : ''}><span></span></span></label>
+        <button type="button" class="btn btn-sm btn-ghost icon-btn" data-cmd="move" data-i="${i}" data-d="-1" ${i === 0 ? 'disabled' : ''} aria-label="למעלה">↑</button>
+        <button type="button" class="btn btn-sm btn-ghost icon-btn" data-cmd="move" data-i="${i}" data-d="1" ${i === rules.actions.length - 1 ? 'disabled' : ''} aria-label="למטה">↓</button>
+        <button type="button" class="btn btn-sm btn-ghost icon-btn" data-cmd="del" data-path="${p}" aria-label="מחיקת פעולה">✕</button>
+      </div>
+      <div class="action-section"><b>מתי?</b><select data-bind="${p}.when" style="width:auto">${options(META.when, a.when)}</select>
+        ${a.conditions.length ? `<select data-bind="${p}.match" style="width:auto"><option value="all" ${a.match !== 'any' ? 'selected' : ''}>וגם כל התנאים מתקיימים:</option><option value="any" ${a.match === 'any' ? 'selected' : ''}>וגם לפחות תנאי אחד מתקיים:</option></select>` : ''}</div>
+      ${a.conditions.map((c, j) => condRow(c, `${p}.conditions.${j}`)).join('')}
+      <button type="button" class="btn btn-sm" data-cmd="add-cond" data-i="${i}">${icon('plus')}תנאי על התגובה</button>
+      <div class="action-section"><b>מה לעשות?</b><div class="seg"><button type="button" data-cmd="type" data-i="${i}" data-v="email" class="${a.type === 'email' ? 'on' : ''}">שליחת מייל</button><button type="button" data-cmd="type" data-i="${i}" data-v="webhook" class="${a.type === 'webhook' ? 'on' : ''}">קריאה לכתובת</button></div></div>
+      ${a.type === 'email' ? `
+        <div class="grid grid-2">${fld('אל', `${p}.email.to`, e.to, { ltr: true, ph: 'a@example.com, b@example.com' })}${fld('עותק (CC)', `${p}.email.cc`, e.cc, { ltr: true })}</div>
+        ${fld('נושא', `${p}.email.subject`, e.subject)}
+        ${fld('תוכן (HTML)', `${p}.email.html`, e.html, { ltr: true, area: true, rows: 7 })}
+        <details><summary style="cursor:pointer" class="small">שולח, BCC וטקסט פשוט</summary><div style="margin-top:10px">
+          <div class="grid grid-2">${fld('שולח', `${p}.email.from`, e.from, { ltr: true, ph: info.settings?.default_from_email || 'ברירת המחדל מההגדרות' })}${fld('עותק מוסתר (BCC)', `${p}.email.bcc`, e.bcc, { ltr: true })}</div>
+          ${fld('טקסט פשוט', `${p}.email.text`, e.text, { area: true, rows: 3 })}</div></details>` : `
+        <div class="field"><label class="f">כתובת</label><div class="row" style="flex-wrap:nowrap"><select data-bind="${p}.webhook.method" style="width:auto" class="ltr">${['POST', 'GET', 'PUT', 'PATCH', 'DELETE'].map((m) => `<option ${w.method === m ? 'selected' : ''}>${m}</option>`).join('')}</select>
+          <input type="text" class="ltr mono" data-bind="${p}.webhook.url" value="${esc(w.url || '')}" placeholder="https://..."></div><div class="err" data-err="rules.${p}.webhook.url"></div></div>
+        ${fld('גוף הבקשה', `${p}.webhook.body`, w.body, { ltr: true, area: true, rows: 4 })}
+        ${fld('כותרות (JSON)', `${p}.webhook.headers`, w.headers || '{}', { ltr: true, area: true, rows: 2 })}`}
+      <label class="check small" style="margin-top:6px"><input type="checkbox" data-bind="${p}.stop" ${a.stop ? 'checked' : ''}> אם הפעולה הזו רצה, לא לבדוק את הפעולות שאחריה</label>
+    </div>`;
+  }
+  function renderRules() {
+    $('#fail-conds').innerHTML = rules.fail_conditions.map((c, i) => condRow(c, `fail_conditions.${i}`)).join('');
+    $('#actions-list').innerHTML = rules.actions.length ? rules.actions.map(actionCard).join('') : '<div class="faint small" style="margin-bottom:8px">אין פעולות. אפשר להוסיף מהכפתורים למטה.</div>';
+  }
+  const pathParts = (path) => path.split('.').map((x) => (/^\d+$/.test(x) ? Number(x) : x));
+  function setPath(path, value) {
+    const parts = pathParts(path);
+    let o = rules;
+    for (const k of parts.slice(0, -1)) o = o[k] ??= {};
+    o[parts[parts.length - 1]] = value;
+  }
+  form.addEventListener('input', (e) => {
+    const b = e.target.dataset?.bind;
+    if (b && e.target.type !== 'checkbox' && e.target.tagName !== 'SELECT') setPath(b, e.target.value);
+  });
+  form.addEventListener('change', (e) => {
+    const b = e.target.dataset?.bind;
+    if (!b) return;
+    setPath(b, e.target.type === 'checkbox' ? e.target.checked : e.target.value);
+    if (e.target.hasAttribute('data-rerender')) renderRules();
+  });
+  const EMAIL_BODY = (line) => `<div dir="rtl" style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6">\n  <p>${line}</p>\n  <p>קוד תגובה: {{status_code}}</p>\n  <p>{{error}}</p>\n  <p><a href="{{run_url}}">פרטי הריצה</a></p>\n</div>`;
+  const blankEmail = (subject, html) => ({ from: '', to: '', cc: '', bcc: '', subject, html, text: '' });
+  const TEMPLATES = {
+    success: () => ({ name: 'מייל כשהצליח', enabled: true, when: 'success', match: 'all', conditions: [], type: 'email', stop: false, email: blankEmail('המשימה "{{task_name}}" הצליחה', EMAIL_BODY('המשימה <b>{{task_name}}</b> הצליחה ב-{{datetime}}.')) }),
+    failure: () => ({ name: 'מייל כשנכשל', enabled: true, when: 'failure', match: 'all', conditions: [], type: 'email', stop: false, email: blankEmail('המשימה "{{task_name}}" נכשלה', EMAIL_BODY('המשימה <b>{{task_name}}</b> נכשלה ב-{{datetime}}.')) }),
+    condition: () => ({ name: 'מייל לפי תוכן התגובה', enabled: true, when: 'always', match: 'all', conditions: [{ source: 'json', path: 'status', op: 'equals', value: '' }], type: 'email', stop: true, email: blankEmail('עדכון מ-{{task_name}}: {{json:status}}', EMAIL_BODY('התקבלה תגובה: <b>{{json:status}}</b>')) }),
+    webhook: () => ({ name: 'קריאה לכתובת', enabled: true, when: 'always', match: 'all', conditions: [], type: 'webhook', stop: false, webhook: { method: 'POST', url: '', headers: '{}', body: '{"task": "{{task_name}}", "result": "{{result}}", "status_code": "{{status_code}}", "error": "{{error}}"}' } }),
+  };
+  form.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-cmd]');
+    if (!btn || !form.contains(btn)) return;
+    const cmd = btn.dataset.cmd;
+    const i = Number(btn.dataset.i);
+    if (cmd === 'add-fail-cond') rules.fail_conditions.push({ source: 'json', path: '', op: 'equals', value: '' });
+    else if (cmd === 'add-cond') rules.actions[i].conditions.push({ source: 'json', path: '', op: 'equals', value: '' });
+    else if (cmd === 'add-action') rules.actions.push(TEMPLATES[btn.dataset.tpl]());
+    else if (cmd === 'move') { const j = i + Number(btn.dataset.d); [rules.actions[i], rules.actions[j]] = [rules.actions[j], rules.actions[i]]; }
+    else if (cmd === 'type') {
+      const a = rules.actions[i];
+      a.type = btn.dataset.v;
+      if (a.type === 'email') a.email ||= blankEmail('', '');
+      else a.webhook ||= TEMPLATES.webhook().webhook;
+    } else if (cmd === 'del') {
+      const parts = pathParts(btn.dataset.path);
+      let arr = rules;
+      for (const k of parts.slice(0, -1)) arr = arr[k];
+      arr.splice(parts[parts.length - 1], 1);
+    } else return;
+    renderRules();
+    if (cmd === 'add-action') $$('#actions-list .action-card').pop()?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+  const collectRules = () => ({
+    ...rules,
+    fail_keywords: $('#fail_keywords').value,
+    keywords_case_sensitive: $('#keywords_cs').checked,
+    no_retry_on_content_error: $('#no_retry_content').checked,
+  });
+
+  // בדיקת הכללים
+  $('#t-run').onclick = async () => {
+    try {
+      const r = await api('POST', '/rules/test', {
+        id, name: $('#name').value, rules: collectRules(), expect_status: $('#expect_status').value, expect_body: $('#expect_body').value,
+        sample: { status: $('#t-status').value, body: $('#t-body').value },
+      });
+      showErrors();
+      const previews = [];
+      $('#t-result').innerHTML = `
+        <div class="alert ${r.outcome === 'success' ? 'alert-ok' : 'alert-bad'}" style="margin-bottom:10px"><b>${r.outcome === 'success' ? 'הריצה תיחשב הצלחה' : 'הריצה תיחשב כשל'}</b>${r.error ? `<span>${esc(r.error)}</span>` : ''}</div>
+        ${r.actions.length ? `<ul class="list">${r.actions.map((a) => {
+          const k = previews.push(a) - 1;
+          return `<li><div><b>${esc(a.name)}</b> <span class="faint small">${a.type === 'email' ? 'מייל' : 'קריאה לכתובת'}</span>
+            <div class="small muted">${esc(a.reason)}${a.preview?.to ? ` · אל: <span class="ltr">${esc(a.preview.to)}</span>` : ''}${a.preview?.subject ? ` · נושא: ${esc(a.preview.subject)}` : ''}${a.preview_error ? ` · <span style="color:var(--bad)">${esc(a.preview_error)}</span>` : ''}</div></div>
+            <div class="row nowrap">${a.run ? badge(['תרוץ', 'b-ok']) : badge(['לא תרוץ', 'b-gray'])}${a.preview ? `<button type="button" class="btn btn-sm" data-pv="${k}">תצוגה</button>` : ''}</div></li>`;
+        }).join('')}</ul>` : '<div class="faint small">לא הוגדרו פעולות</div>'}`;
+      $$('#t-result [data-pv]').forEach((b) => (b.onclick = () => {
+        const a = previews[b.dataset.pv];
+        const ov = openModal(esc(a.name), a.type === 'email'
+          ? `<dl class="kvlist"><dt>אל</dt><dd class="ltr">${esc(a.preview.to)}</dd>${a.preview.cc ? `<dt>CC</dt><dd class="ltr">${esc(a.preview.cc)}</dd>` : ''}<dt>נושא</dt><dd>${esc(a.preview.subject)}</dd></dl><iframe class="mail-preview" sandbox style="margin-top:12px"></iframe>`
+          : `<pre class="box">${esc(`${a.preview.method} ${a.preview.url}\n\n${a.preview.body || ''}`)}</pre>`);
+        const fr = $('iframe', ov);
+        if (fr) fr.srcdoc = a.preview.html || `<pre>${esc(a.preview.text || '')}</pre>`;
+      }));
+    } catch (err) {
+      if (err.data?.fields) showErrors(Object.fromEntries(Object.entries(err.data.fields).map(([k, v]) => [k.startsWith('rules.') ? k : `rules.${k}`, v])));
+      toast(err.data?.fields ? `${err.message}: ${Object.values(err.data.fields)[0]}` : err.message, 'bad');
+    }
+  };
+  if ($('#t-last')) $('#t-last').onclick = async () => {
+    try {
+      const { runs } = await api('GET', `/runs?task_id=${id}&limit=1`);
+      if (!runs.length) { toast('למשימה עדיין אין ריצות'); return; }
+      const { run } = await api('GET', `/runs/${runs[0].id}`);
+      $('#t-status').value = run.status_code ?? 200;
+      $('#t-body').value = run.response_snippet || '';
+      toast('נטענה התגובה מהריצה האחרונה (עד 1000 תווים ראשונים)');
+    } catch (err) { toast(err.message, 'bad'); }
+  };
+
+  renderRules();
   renderHeaders();
   renderDates();
   applyType();
@@ -1107,7 +1314,7 @@ async function viewRuns(initial = {}) {
 function openRun(id) { showRun(id); }
 async function showRun(id) {
   try {
-    const { run, email } = await api('GET', `/runs/${id}`);
+    const { run, email, actions = [] } = await api('GET', `/runs/${id}`);
     const attempts = run.attempts_detail || [];
     openModal(`ריצה #${run.id} · ${esc(run.task_name)}`, `
       <dl class="kvlist">
@@ -1121,6 +1328,7 @@ async function showRun(id) {
         ${email ? `<dt>מעקב מייל</dt><dd>${emailBadge(email.status)} <a href="#/emails?open=${email.id}">פרטי המסירה</a></dd>` : ''}
       </dl>
       ${attempts.length ? `<h3 style="margin-top:16px">ניסיונות</h3><table class="small"><thead><tr><th>#</th><th>זמן</th><th>קוד</th><th>משך</th><th>שגיאה</th></tr></thead><tbody>${attempts.map((a) => `<tr><td>${a.attempt}</td><td class="nowrap">${hourFmt.format(a.at)}:${String(new Date(a.at).getSeconds()).padStart(2, '0')}</td><td class="mono">${a.status ?? '—'}</td><td>${dur(a.duration_ms)}</td><td>${esc(a.error || 'תקין')}</td></tr>`).join('')}</tbody></table>` : ''}
+      ${actions.length ? `<h3 style="margin-top:16px">פעולות שבוצעו</h3><table class="small"><thead><tr><th>פעולה</th><th>תוצאה</th><th>פרטים</th></tr></thead><tbody>${actions.map((a) => `<tr><td>${esc(a.action_name)} <span class="faint">${a.action_type === 'email' ? 'מייל' : 'Webhook'}</span></td><td>${a.status === 'success' ? badge(['בוצעה', 'b-ok']) : badge(['נכשלה', 'b-bad'])}</td><td>${esc(a.detail || '')}</td></tr>`).join('')}</tbody></table>` : ''}
       <h3 style="margin-top:16px">תחילת התגובה</h3>
       ${run.response_snippet ? `<pre class="box">${esc(run.response_snippet)}</pre>` : '<div class="faint">אין תוכן</div>'}`,
       `<a class="btn" href="#/tasks/${run.task_id}">עריכת המשימה</a><a class="btn" href="#/tasks/${run.task_id}/runs">כל הריצות של המשימה</a>`);
