@@ -3,10 +3,12 @@
 import { normalizeTask, WHEN, OPS } from './task.js';
 import { nextRun, upcoming, describeSchedule, describeInstant, TYPES, INTERVALS } from './schedule.js';
 import { performRequest, planEmails, executeTask, claimTask, parseConfig } from './runner.js';
-import { getMailSettings, saveMailSettings, sendEmail, textToHtml } from './email.js';
+import { getMailSettings, saveMailSettings, sendEmail, designedEmail, textToBlocks } from './email.js';
 import { hebrewToGregorian, HEBREW_MONTHS, gematria, hebrewParts } from './hebrew.js';
 import { VARIABLES } from './template.js';
 import { localParts } from './time.js';
+import { makeResponse } from './task.js';
+import { render, whenText } from './template.js';
 
 const json = (data, status = 200) => Response.json(data, { status });
 const fail = (error, status = 400, extra = {}) => json({ error, ...extra }, status);
@@ -126,7 +128,7 @@ async function testTask(env, request) {
     status_code: res.resp.status,
     duration_ms: Date.now() - t0,
     response: res.resp.body.slice(0, 5000),
-    emails: planEmails(v.config, ctx),
+    emails: planEmails(v.config, ctx, { brand: (await getMailSettings(env.DB)).brand_name }),
   });
 }
 
@@ -167,6 +169,7 @@ async function getSettings(env) {
   return json({
     from_email: s.from_email,
     reply_to: s.reply_to,
+    brand_name: s.brand_name,
     has_key: Boolean(key),
     key_hint: key ? `${key.slice(0, 3)}…${key.slice(-4)}` : '',
   });
@@ -174,7 +177,7 @@ async function getSettings(env) {
 
 async function putSettings(env, request) {
   const b = await body(request);
-  const values = { from_email: String(b.from_email ?? '').trim(), reply_to: String(b.reply_to ?? '').trim() };
+  const values = { from_email: String(b.from_email ?? '').trim(), reply_to: String(b.reply_to ?? '').trim(), brand_name: String(b.brand_name ?? '').trim().slice(0, 100) };
   if (b.resend_api_key) values.resend_api_key = String(b.resend_api_key).trim();
   if (values.from_email && !/^[^<>]*<?[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+>?$/.test(values.from_email)) return fail('כתובת השולח לא תקינה. דוגמה: מערכת <noreply@your-domain.com>');
   if (values.reply_to && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.reply_to)) return fail('כתובת המענה לא תקינה');
@@ -185,9 +188,42 @@ async function putSettings(env, request) {
 async function testEmail(env, request) {
   const to = String((await body(request)).to || '').trim();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return fail('כתובת לא תקינה');
-  const text = 'זהו מייל בדיקה ממתזמן המשימות. אם הוא הגיע, הגדרות המייל תקינות.';
-  const r = await sendEmail(env, await getMailSettings(env.DB), { to: [to], subject: 'בדיקה ממתזמן המשימות', text, html: textToHtml(text) });
+  const settings = await getMailSettings(env.DB);
+  const text = 'שלום,\n\nזהו מייל בדיקה. אם הוא הגיע אליך, הגדרות המייל תקינות והמיילים של המשימות יישלחו כך.\n\nבברכה';
+  const html = designedEmail({ title: 'מייל בדיקה', bodyHtml: textToBlocks(text), outcome: 'success', brand: settings.brand_name });
+  const r = await sendEmail(env, settings, { to: [to], subject: 'מייל בדיקה ממתזמן המשימות', text, html });
   return r.ok ? json({ ok: true }) : fail(r.error, 502);
+}
+
+/**
+ * תצוגה מקדימה של מייל מעוצב, בלי להריץ את הבקשה.
+ * עם rule: מציג את המייל של הכלל עם נתוני דוגמה. בלי rule: מייל לדוגמה (לדף ההגדרות).
+ */
+async function emailPreview(env, request) {
+  const b = await body(request);
+  const settings = await getMailSettings(env.DB);
+  const brand = b.brand_name ?? settings.brand_name;
+  const rule = b.rule;
+  const outcome = rule?.when === 'failure' ? 'failure' : 'success';
+  const ctx = {
+    env,
+    now: Date.now(),
+    task: { name: b.name || 'שם המשימה' },
+    resp: makeResponse({ status: outcome === 'success' ? 200 : 500, body: '{"responseStatus":"OK","message":"ok"}' }),
+    outcome,
+    error: 'דוגמה לסיבת כשל: השרת לא ענה',
+  };
+  const subject = rule ? render(rule.email?.subject || '', ctx) : 'בוצע בהצלחה: העתקת הקובץ';
+  const text = rule ? render(rule.email?.body || '', ctx) : 'שלום רב,\n\nרצינו לעדכן שהפעולה בוצעה בהצלחה.\n\nמה בוצע:\n• הקובץ הועתק משלוחה 1 לשלוחה 2\n• הוא זמין עכשיו למאזינים\n\nבברכה';
+  if (rule?.email?.html) return json({ subject, html: render(rule.email.body || '', ctx, { html: true }) });
+  const html = designedEmail({
+    title: subject,
+    bodyHtml: textToBlocks(text),
+    outcome: rule?.when === 'always' ? 'success' : outcome,
+    details: [['משימה', ctx.task.name], ['מתי', whenText(ctx.now)]],
+    brand,
+  });
+  return json({ subject, html });
 }
 
 function meta() {
@@ -210,6 +246,14 @@ export async function handleApi(request, env, ctx, path) {
   let match;
 
   if (p === '/meta' && m === 'GET') return meta();
+  if (p === '/stats' && m === 'GET') {
+    const since = Date.now() - 7 * 86_400_000;
+    const [t, r] = await Promise.all([
+      env.DB.prepare('SELECT COUNT(*) AS total, SUM(enabled = 1) AS active, MIN(CASE WHEN enabled = 1 THEN next_run_at END) AS next_at FROM scheduler_tasks').first(),
+      env.DB.prepare("SELECT SUM(status = 'success') AS ok, SUM(status = 'failure') AS bad FROM scheduler_runs WHERE started_at >= ?").bind(since).first(),
+    ]);
+    return json({ total: t.total || 0, active: t.active || 0, next: t.next_at ? describeInstant(t.next_at) : null, ok7: r.ok || 0, bad7: r.bad || 0 });
+  }
   if (p === '/tasks' && m === 'GET') {
     const { results } = await env.DB.prepare('SELECT * FROM scheduler_tasks ORDER BY enabled DESC, COALESCE(next_run_at, 9e15), id').all();
     return json({ tasks: results.map(present) });
@@ -248,6 +292,7 @@ export async function handleApi(request, env, ctx, path) {
   if (p === '/settings' && m === 'GET') return getSettings(env);
   if (p === '/settings' && m === 'PUT') return putSettings(env, request);
   if (p === '/settings/test' && m === 'POST') return testEmail(env, request);
+  if (p === '/email-preview' && m === 'POST') return emailPreview(env, request);
   if (p === '/hebrew-to-gregorian' && m === 'GET') {
     const u = new URL(request.url);
     const date = hebrewToGregorian(Number(u.searchParams.get('year')), u.searchParams.get('month'), Number(u.searchParams.get('day')));

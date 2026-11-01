@@ -20,6 +20,13 @@ export const VARIABLES = [
 ];
 
 const RESERVED = new Set(['ADMIN_PASSWORD']);
+
+/** "כ״א חשוון תשפ״ז · 01.11.2026 בשעה 08:00" - לתיבת הפרטים במייל */
+export function whenText(now) {
+  const p = localParts(now);
+  const d = formatDateTime(now);
+  return `${formatHebrewDate(p.year, p.month, p.day)} · ${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)} בשעה ${d.slice(11, 16)}`;
+}
 const PATTERN = /\{\{\s*([a-z_]+)(?::([^{}]+?))?\s*\}\}/g;
 const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const asText = (v) => (v == null ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v));

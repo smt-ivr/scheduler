@@ -10,22 +10,25 @@
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg: #f4f5f7; --panel: #fff; --soft: #f8f9fb; --line: #e4e7ec; --line2: #cfd4dc;
-  --text: #1b2130; --muted: #5f6b7a; --faint: #8c95a3;
-  --accent: #2456d3; --accent-soft: #e9effc; --on-accent: #fff;
-  --ok: #0f7b4b; --ok-soft: #e3f5ec; --bad: #b42318; --bad-soft: #fdecea; --gray-soft: #eef0f3;
+  --bg: #f5f6f8; --panel: #fff; --soft: #f8f9fb; --line: #e6e8ec; --line2: #d0d5dd;
+  --text: #101828; --muted: #5d6779; --faint: #8a93a3;
+  --accent: #2456d3; --accent-2: #1d47b0; --accent-soft: #eef3fd; --on-accent: #fff;
+  --ok: #0f7b4b; --ok-soft: #e7f6ee; --bad: #c0261a; --bad-soft: #fdeeec; --warn: #b54708; --warn-soft: #fef4e6; --gray-soft: #f0f2f5;
+  --radius: 12px; --shadow: 0 1px 2px rgba(16,24,40,.05); --shadow-lg: 0 12px 32px rgba(16,24,40,.14);
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0f1218; --panel: #171b23; --soft: #1c212b; --line: #2a303c; --line2: #3a4250;
-    --text: #e7eaf0; --muted: #a2aab8; --faint: #7a8392;
-    --accent: #5b8cff; --accent-soft: #1d2b4d; --on-accent: #0b1020;
-    --ok: #4cc38a; --ok-soft: #12301f; --bad: #ff7b72; --bad-soft: #3a1513; --gray-soft: #232935;
+    --bg: #0e1117; --panel: #161a22; --soft: #1b2029; --line: #272d38; --line2: #39414f;
+    --text: #e8ebf1; --muted: #a3abba; --faint: #7a8394;
+    --accent: #6b95ff; --accent-2: #87a9ff; --accent-soft: #1b2744; --on-accent: #0b1020;
+    --ok: #4cc38a; --ok-soft: #10291c; --bad: #ff7b72; --bad-soft: #351513; --warn: #f5b04c; --warn-soft: #33240c; --gray-soft: #222833;
+    --shadow: none; --shadow-lg: 0 12px 32px rgba(0,0,0,.5);
   }
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.55 Heebo, "Segoe UI", Arial, sans-serif; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--text); font: 15px/1.55 Heebo, "Segoe UI", Arial, sans-serif; -webkit-font-smoothing: antialiased; }
 a { color: var(--accent); text-decoration: none; }
 button, input, select, textarea { font: inherit; color: inherit; }
 code, .mono { font-family: var(--mono); font-size: 13px; }
@@ -34,133 +37,182 @@ code, .mono { font-family: var(--mono); font-size: 13px; }
 .muted { color: var(--muted); } .faint { color: var(--faint); } .small { font-size: 13px; }
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .spacer { flex: 1; }
+svg.i { width: 18px; height: 18px; flex: none; }
 
-header.top { background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 10; }
-.top-in { max-width: 1180px; margin: 0 auto; padding: 0 20px; display: flex; align-items: center; gap: 22px; height: 58px; }
-.brand { font-weight: 700; font-size: 17px; display: flex; gap: 8px; align-items: center; white-space: nowrap; }
-.brand i { width: 28px; height: 28px; border-radius: 8px; background: var(--accent); display: inline-block; position: relative; }
-.brand i::after { content: ""; position: absolute; inset: 7px; border: 2px solid var(--on-accent); border-radius: 50%; }
-nav.tabs { display: flex; gap: 4px; overflow-x: auto; }
-nav.tabs a { padding: 7px 12px; border-radius: 8px; color: var(--muted); font-weight: 500; white-space: nowrap; }
-nav.tabs a.on { background: var(--accent-soft); color: var(--accent); }
-main { max-width: 1180px; margin: 0 auto; padding: 24px 20px 80px; }
-h1 { font-size: 22px; margin: 0; }
-h2 { font-size: 16px; margin: 0 0 12px; }
-.head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+/* מסגרת: תפריט צד + תוכן */
+.layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); min-height: 100vh; }
+.sidebar { background: var(--panel); border-inline-end: 1px solid var(--line); padding: 20px 14px; display: flex; flex-direction: column; gap: 4px; position: sticky; top: 0; height: 100vh; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; padding: 4px 10px 22px; }
+.brand-mark { width: 34px; height: 34px; border-radius: 10px; background: linear-gradient(135deg, var(--accent), #5b7ff0); color: #fff; display: grid; place-items: center; }
+.brand-mark svg { width: 19px; height: 19px; }
+.brand small { display: block; font-weight: 400; font-size: 12px; color: var(--faint); }
+nav.menu { display: flex; flex-direction: column; gap: 2px; }
+nav.menu a { display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 9px; color: var(--muted); font-weight: 500; }
+nav.menu a:hover { background: var(--soft); color: var(--text); }
+nav.menu a.on { background: var(--accent-soft); color: var(--accent); }
+.side-foot { margin-top: auto; border-top: 1px solid var(--line); padding-top: 12px; }
+.side-foot button { width: 100%; justify-content: flex-start; }
+main#view { padding: 30px 36px 90px; max-width: 1160px; width: 100%; margin: 0 auto; }
+.head { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; margin-bottom: 22px; flex-wrap: wrap; }
+h1 { font-size: 25px; margin: 0; letter-spacing: -.01em; }
+.head .sub { color: var(--muted); margin-top: 3px; }
+h2 { font-size: 16.5px; margin: 0 0 14px; }
 
-.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+/* רכיבים */
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); }
 .stack { display: grid; gap: 16px; }
-.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--line2); background: var(--panel); border-radius: 8px; padding: 7px 14px; cursor: pointer; font-weight: 500; white-space: nowrap; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--line2); background: var(--panel); border-radius: 9px; padding: 8px 15px; cursor: pointer; font-weight: 500; white-space: nowrap; transition: background .12s, border-color .12s; }
 .btn:hover { background: var(--soft); }
 .btn:disabled { opacity: .5; cursor: default; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn.primary:hover { background: var(--accent-2); }
 .btn.danger { color: var(--bad); }
-.btn.sm { padding: 4px 10px; font-size: 13.5px; }
+.btn.sm { padding: 5px 11px; font-size: 13.5px; border-radius: 8px; }
 .btn.ghost { border-color: transparent; background: transparent; }
+.btn.ghost:hover { background: var(--soft); }
+.btn svg.i { width: 16px; height: 16px; }
+.icon-btn { width: 34px; height: 34px; padding: 0; border-radius: 8px; border: 1px solid transparent; background: transparent; color: var(--muted); display: inline-grid; place-items: center; cursor: pointer; }
+.icon-btn:hover { background: var(--soft); color: var(--text); border-color: var(--line); }
+.icon-btn.danger:hover { color: var(--bad); }
 .x { border: 0; background: transparent; cursor: pointer; color: var(--faint); font-size: 16px; padding: 4px 8px; border-radius: 6px; }
 .x:hover { background: var(--soft); color: var(--bad); }
-
-label.f { display: block; font-weight: 500; font-size: 14px; margin-bottom: 5px; }
+label.f { display: block; font-weight: 500; font-size: 14px; margin-bottom: 6px; }
 .field { margin-bottom: 14px; }
-.help { color: var(--faint); font-size: 12.5px; margin-top: 4px; }
+.help { color: var(--faint); font-size: 12.5px; margin-top: 5px; }
 input[type=text], input[type=password], input[type=number], input[type=date], input[type=time], input[type=email], select, textarea {
-  width: 100%; border: 1px solid var(--line2); background: var(--panel); border-radius: 8px; padding: 8px 10px; outline: none; min-width: 0;
+  width: 100%; border: 1px solid var(--line2); background: var(--panel); border-radius: 9px; padding: 9px 11px; outline: none; min-width: 0; transition: border-color .12s, box-shadow .12s;
 }
 input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 textarea { resize: vertical; min-height: 70px; }
 textarea.code { font-family: var(--mono); font-size: 13px; direction: ltr; text-align: left; }
 .w-auto { width: auto !important; }
-.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; }
-.chip { border: 1px solid var(--line2); background: var(--panel); border-radius: 999px; padding: 6px 14px; cursor: pointer; font-weight: 500; }
+.chip { border: 1px solid var(--line2); background: var(--panel); border-radius: 999px; padding: 7px 15px; cursor: pointer; font-weight: 500; }
+.chip:hover { border-color: var(--accent); }
 .chip.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-.seg { display: inline-flex; border: 1px solid var(--line2); border-radius: 9px; padding: 3px; background: var(--soft); }
-.seg button { border: 0; background: transparent; padding: 5px 14px; border-radius: 7px; cursor: pointer; color: var(--muted); font-weight: 500; }
-.seg button.on { background: var(--panel); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
-.days { display: flex; gap: 5px; flex-wrap: wrap; }
-.days button { width: 38px; height: 34px; border: 1px solid var(--line2); background: var(--panel); border-radius: 8px; cursor: pointer; font-weight: 600; }
+.seg { display: inline-flex; border: 1px solid var(--line2); border-radius: 10px; padding: 3px; background: var(--soft); }
+.seg button { border: 0; background: transparent; padding: 6px 16px; border-radius: 8px; cursor: pointer; color: var(--muted); font-weight: 500; }
+.seg button.on { background: var(--panel); color: var(--text); box-shadow: 0 1px 3px rgba(16,24,40,.12); }
+.days { display: flex; gap: 6px; flex-wrap: wrap; }
+.days button { width: 40px; height: 36px; border: 1px solid var(--line2); background: var(--panel); border-radius: 9px; cursor: pointer; font-weight: 600; }
 .days button.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-.switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+.switch { display: inline-flex; align-items: center; gap: 9px; cursor: pointer; user-select: none; }
 .switch input { display: none; }
-.switch span { width: 40px; height: 22px; border-radius: 22px; background: var(--line2); position: relative; transition: .15s; }
-.switch span::after { content: ""; position: absolute; top: 3px; inset-inline-start: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: .15s; }
+.switch span { width: 40px; height: 22px; border-radius: 22px; background: var(--line2); position: relative; transition: .15s; flex: none; }
+.switch span::after { content: ""; position: absolute; top: 3px; inset-inline-start: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: .15s; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
 .switch input:checked + span { background: var(--ok); }
 .switch input:checked + span::after { inset-inline-start: 21px; }
-.check { display: inline-flex; gap: 7px; align-items: center; cursor: pointer; }
+.check { display: inline-flex; gap: 8px; align-items: center; cursor: pointer; }
 .check input { width: 16px; height: 16px; accent-color: var(--accent); }
-
 .line { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
 .line > * { flex: 1 1 0; }
 .line > .x, .line > .tag-he { flex: 0 0 auto; }
 .tag-he { color: var(--muted); font-size: 13px; min-width: 120px; }
 .tag-he.past { color: var(--bad); }
-
-.badge { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 999px; font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+.badge { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600; white-space: nowrap; }
 .badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .b-ok { background: var(--ok-soft); color: var(--ok); } .b-bad { background: var(--bad-soft); color: var(--bad); }
 .b-gray { background: var(--gray-soft); color: var(--muted); } .b-run { background: var(--accent-soft); color: var(--accent); }
+.empty { text-align: center; color: var(--muted); padding: 48px 16px; }
+.empty .big { font-size: 18px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
 
-.task { display: grid; grid-template-columns: 1fr auto; gap: 8px 16px; align-items: center; }
-.task + .task { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 14px; }
-.task .name { font-weight: 600; font-size: 16px; }
-.task .meta { color: var(--muted); font-size: 13.5px; display: flex; gap: 6px 16px; flex-wrap: wrap; margin-top: 3px; }
-.empty { text-align: center; color: var(--faint); padding: 40px 10px; }
+/* כרטיסי סיכום */
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 22px; }
+.stat { display: flex; gap: 14px; align-items: center; padding: 16px 18px; }
+.stat .ic { width: 42px; height: 42px; border-radius: 11px; display: grid; place-items: center; flex: none; }
+.stat .ic svg { width: 21px; height: 21px; }
+.stat .v { font-size: 22px; font-weight: 700; line-height: 1.2; }
+.stat .v.sm { font-size: 15px; }
+.stat .l { color: var(--muted); font-size: 13px; }
+.ic-blue { background: var(--accent-soft); color: var(--accent); } .ic-green { background: var(--ok-soft); color: var(--ok); }
+.ic-red { background: var(--bad-soft); color: var(--bad); } .ic-amber { background: var(--warn-soft); color: var(--warn); }
 
-.editor { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 18px; align-items: start; }
-.side { position: sticky; top: 76px; display: grid; gap: 16px; }
-.next li { list-style: none; padding: 7px 0; border-bottom: 1px dashed var(--line); font-size: 14px; }
+/* טבלת משימות */
+.table-card { padding: 0; overflow: hidden; }
+.table-card .toolbar { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.table-card .toolbar input { max-width: 280px; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: start; padding: 11px 14px; border-bottom: 1px solid var(--line); font-size: 14px; vertical-align: middle; }
+th { color: var(--muted); font-size: 12.5px; font-weight: 600; background: var(--soft); white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+tr.click { cursor: pointer; } tr.click:hover td { background: var(--soft); }
+.tbl { overflow-x: auto; }
+.tasks td.name-cell { min-width: 220px; }
+.tasks .tname { font-weight: 600; font-size: 15px; color: var(--text); }
+.tasks .tname:hover { color: var(--accent); }
+.tasks .tsub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.tasks .err { color: var(--bad); font-size: 12.5px; margin-top: 3px; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tasks tr.off .tname, .tasks tr.off .tsub { opacity: .55; }
+.actions { display: flex; gap: 2px; justify-content: flex-end; align-items: center; }
+
+/* עורך */
+.editor { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; align-items: start; }
+.side { position: sticky; top: 20px; display: grid; gap: 16px; }
+.next li { list-style: none; padding: 8px 0; border-bottom: 1px dashed var(--line); font-size: 14px; }
 .next li:last-child { border: 0; }
 .next { margin: 0; padding: 0; }
 .errors { background: var(--bad-soft); color: var(--bad); border-radius: 10px; padding: 12px 14px; font-size: 13.5px; }
 .errors ul { margin: 6px 0 0; padding-inline-start: 18px; }
-.rule { border: 1px solid var(--line); border-radius: 10px; padding: 14px; background: var(--soft); margin-bottom: 12px; }
+.rule { border: 1px solid var(--line); border-radius: 11px; padding: 16px; background: var(--soft); margin-bottom: 12px; }
 .rule-ok { border-inline-start: 4px solid var(--ok); }
 .rule-bad { border-inline-start: 4px solid var(--bad); }
-.step { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: var(--on-accent); font-size: 13px; margin-inline-end: 8px; }
-.var-chips { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; margin-top: 6px; }
+.step { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--on-accent); font-size: 13px; margin-inline-end: 9px; vertical-align: middle; }
+.var-chips { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; margin-top: 7px; }
 .vchip { border: 1px dashed var(--line2); background: var(--panel); border-radius: 999px; padding: 2px 10px; font-size: 12.5px; cursor: pointer; color: var(--accent); }
 .vchip:hover { border-style: solid; border-color: var(--accent); }
-.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
-.ex { text-align: start; border: 1px solid var(--line2); background: var(--panel); border-radius: 10px; padding: 14px; cursor: pointer; display: grid; gap: 4px; }
+.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.ex { text-align: start; border: 1px solid var(--line2); background: var(--panel); border-radius: 12px; padding: 16px; cursor: pointer; display: grid; gap: 5px; transition: border-color .12s, background .12s; }
 .ex:hover { border-color: var(--accent); background: var(--accent-soft); }
-.ex span { color: var(--muted); font-size: 13px; }
-.md { line-height: 1.7; }
-.md .md-h { margin: 22px 0 10px; } .md h2.md-h { font-size: 21px; margin-top: 0; } .md h3.md-h { font-size: 18px; border-bottom: 1px solid var(--line); padding-bottom: 6px; } .md h4.md-h { font-size: 15.5px; }
-.md p { margin: 8px 0; } .md pre.box { margin: 10px 0; max-height: none; } .md table { margin: 10px 0; } .md hr { border: 0; border-top: 1px solid var(--line); margin: 22px 0; }
-.md code { background: var(--soft); padding: 1px 5px; border-radius: 4px; }
+.ex b { font-size: 15px; } .ex span { color: var(--muted); font-size: 13px; }
 .rule-num { width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--on-accent); display: grid; place-items: center; font-weight: 700; font-size: 13px; flex: none; }
 .cond { display: flex; gap: 6px; margin-bottom: 6px; flex-wrap: wrap; }
 .cond > select, .cond > input { flex: 1 1 120px; width: auto; }
-.sub { font-weight: 600; font-size: 13.5px; margin: 12px 0 6px; }
+.sub { font-weight: 600; font-size: 13.5px; margin: 14px 0 7px; }
 .vars { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 4px 14px; font-size: 13px; margin-top: 8px; }
 .vars code { color: var(--accent); }
-
-table { width: 100%; border-collapse: collapse; }
-th, td { text-align: start; padding: 9px 10px; border-bottom: 1px solid var(--line); font-size: 14px; }
-th { color: var(--muted); font-size: 12.5px; font-weight: 600; }
-tr.click { cursor: pointer; } tr.click:hover td { background: var(--soft); }
-.tbl { overflow-x: auto; }
-pre.box { background: var(--soft); border: 1px solid var(--line); border-radius: 8px; padding: 10px; white-space: pre-wrap; word-break: break-word; font: 12.5px/1.5 var(--mono); max-height: 320px; overflow: auto; direction: ltr; text-align: left; margin: 0; }
-dl.kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; font-size: 14px; }
+pre.box { background: var(--soft); border: 1px solid var(--line); border-radius: 9px; padding: 11px; white-space: pre-wrap; word-break: break-word; font: 12.5px/1.5 var(--mono); max-height: 320px; overflow: auto; direction: ltr; text-align: left; margin: 0; }
+dl.kv { display: grid; grid-template-columns: max-content 1fr; gap: 7px 18px; margin: 0; font-size: 14px; }
 dl.kv dt { color: var(--muted); } dl.kv dd { margin: 0; word-break: break-word; }
+.md { line-height: 1.75; }
+.md .md-h { margin: 24px 0 10px; } .md h2.md-h { font-size: 22px; margin-top: 0; } .md h3.md-h { font-size: 18px; border-bottom: 1px solid var(--line); padding-bottom: 7px; } .md h4.md-h { font-size: 15.5px; }
+.md p { margin: 8px 0; } .md pre.box { margin: 10px 0; max-height: none; } .md table { margin: 10px 0; border: 1px solid var(--line); } .md hr { border: 0; border-top: 1px solid var(--line); margin: 24px 0; }
+.md code { background: var(--soft); padding: 1px 5px; border-radius: 4px; }
 
-.overlay { position: fixed; inset: 0; background: rgba(10,14,22,.45); display: grid; place-items: center; z-index: 50; padding: 16px; }
-.modal { background: var(--panel); border-radius: 12px; width: min(720px, 100%); max-height: calc(100vh - 32px); overflow: auto; }
-.modal-h { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); }
+/* חלונות והודעות */
+.overlay { position: fixed; inset: 0; background: rgba(10,14,22,.5); display: grid; place-items: center; z-index: 50; padding: 16px; }
+.modal { background: var(--panel); border-radius: 14px; width: min(740px, 100%); max-height: calc(100vh - 32px); overflow: auto; box-shadow: var(--shadow-lg); }
+.modal-h { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); z-index: 1; }
 .modal-h h2 { margin: 0; }
-.modal-b { padding: 18px; }
-iframe.mail { width: 100%; height: 240px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
-.toasts { position: fixed; bottom: 18px; inset-inline-start: 18px; display: grid; gap: 8px; z-index: 60; }
-.toast { background: var(--text); color: var(--panel); padding: 10px 16px; border-radius: 9px; max-width: 420px; }
+.modal-b { padding: 20px; }
+iframe.mail { width: 100%; height: 420px; border: 1px solid var(--line); border-radius: 10px; background: #f2f4f7; }
+.toasts { position: fixed; bottom: 20px; inset-inline-start: 20px; display: grid; gap: 8px; z-index: 60; }
+.toast { background: var(--text); color: var(--panel); padding: 11px 17px; border-radius: 10px; max-width: 420px; box-shadow: var(--shadow-lg); }
 .toast.ok { background: var(--ok); color: #fff; } .toast.bad { background: var(--bad); color: #fff; }
-.login { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
-.login .card { width: min(360px, 100%); }
+.login { min-height: 100vh; display: grid; place-items: center; padding: 16px; background: radial-gradient(circle at 70% 20%, var(--accent-soft), transparent 50%), var(--bg); }
+.login .card { width: min(380px, 100%); padding: 30px; box-shadow: var(--shadow-lg); }
+.login .brand { padding: 0 0 20px; }
 
-@media (max-width: 900px) { .editor { grid-template-columns: 1fr; } .side { position: static; } }
-@media (max-width: 640px) {
-  .top-in { gap: 10px; padding: 0 12px; } .brand span { display: none; }
-  main { padding: 16px 14px 60px; } .grid2 { grid-template-columns: 1fr; }
-  .task { grid-template-columns: 1fr; } .line { flex-wrap: wrap; } .tag-he { min-width: 0; }
+@media (max-width: 1100px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 960px) { .editor { grid-template-columns: 1fr; } .side { position: static; } }
+@media (max-width: 860px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .sidebar { position: sticky; top: 0; z-index: 20; height: auto; flex-direction: row; align-items: center; padding: 8px 12px; border-inline-end: 0; border-bottom: 1px solid var(--line); overflow-x: auto; gap: 8px; }
+  .brand { padding: 0 4px 0 8px; } .brand span { display: none; }
+  nav.menu { flex-direction: row; } nav.menu a { padding: 8px 10px; white-space: nowrap; } nav.menu a span { display: none; }
+  nav.menu a.on span { display: inline; }
+  .side-foot { margin: 0 auto 0 0; border: 0; padding: 0; } .side-foot button span { display: none; }
+  main#view { padding: 18px 14px 70px; }
+  .grid2 { grid-template-columns: 1fr; }
+  .stats { grid-template-columns: 1fr 1fr; gap: 10px; } .stat { padding: 12px; gap: 10px; } .stat .ic { width: 36px; height: 36px; }
+  /* בטלפון כל שורה בטבלה הופכת לכרטיס */
+  table.tasks thead { display: none; }
+  table.tasks tr { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+  table.tasks td { border: 0; padding: 0; }
+  table.tasks td.name-cell { grid-column: 1 / -1; min-width: 0; }
+  table.tasks td.actions-cell { grid-column: 1 / -1; }
+  .actions { justify-content: flex-start; }
+  .line { flex-wrap: wrap; } .tag-he { min-width: 0; }
 }
 </style>
 </head>
@@ -221,12 +273,33 @@ const closeModal = () => $$('.overlay').forEach((o) => o.remove());
 document.addEventListener('keydown', (e) => e.key === 'Escape' && closeModal());
 const confirmDo = (text) => window.confirm(text);
 
+// ---------- אייקונים ----------
+const ICONS = {
+  logo: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  tasks: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 9h8M8 13h8M8 17h5"/>',
+  runs: '<path d="M3 12h4l3 7 4-14 3 7h4"/>',
+  mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
+  docs: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>',
+  logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
+  play: '<path d="M8 5v14l11-7z"/>',
+  edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 1 1 3 3L7 19l-4 1 1-4z"/>',
+  list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+  trash: '<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  alert: '<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  code: '<path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/>',
+};
+const ic = (n) => `<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]}</svg>`;
+
 // ---------- כניסה ומסגרת ----------
 function showLogin() {
-  $('#app').innerHTML = `<div class="login"><form class="card" id="lf"><h2>מתזמן משימות</h2>
+  $('#app').innerHTML = `<div class="login"><form class="card" id="lf">
+    <div class="brand"><div class="brand-mark">${ic('logo')}</div><div>מתזמן משימות<small>כניסה למערכת</small></div></div>
     <div class="field"><label class="f" for="pw">סיסמה</label><input type="password" id="pw" autofocus></div>
-    <div class="small" style="color:var(--bad)" id="le"></div>
-    <button class="btn primary" style="width:100%;margin-top:8px">כניסה</button></form></div>`;
+    <div class="small" style="color:var(--bad);min-height:20px" id="le"></div>
+    <button class="btn primary" style="width:100%">כניסה</button></form></div>`;
   $('#lf').onsubmit = async (e) => {
     e.preventDefault();
     try { await api('POST', '/login', { password: $('#pw').value }); shell(); route(); }
@@ -234,10 +307,14 @@ function showLogin() {
   };
 }
 function shell() {
-  $('#app').innerHTML = `<header class="top"><div class="top-in">
-      <div class="brand"><i></i><span>מתזמן משימות</span></div>
-      <nav class="tabs"><a href="#/" data-nav="tasks">משימות</a><a href="#/runs" data-nav="runs">יומן ריצות</a><a href="#/settings" data-nav="settings">הגדרות מייל</a><a href="#/docs" data-nav="docs">תיעוד</a></nav>
-      <span class="spacer"></span><button class="btn ghost sm" id="logout">יציאה</button></div></header><main id="view"></main>`;
+  const links = [['tasks', '#/', 'tasks', 'משימות'], ['runs', '#/runs', 'runs', 'יומן ריצות'], ['settings', '#/settings', 'mail', 'הגדרות מייל'], ['docs', '#/docs', 'docs', 'תיעוד']];
+  $('#app').innerHTML = `<div class="layout">
+    <aside class="sidebar">
+      <div class="brand"><div class="brand-mark">${ic('logo')}</div><span>מתזמן משימות</span></div>
+      <nav class="menu">${links.map(([k, h, i, l]) => `<a href="${h}" data-nav="${k}">${ic(i)}<span>${l}</span></a>`).join('')}</nav>
+      <div class="side-foot"><button class="btn ghost" id="logout">${ic('logout')}<span>יציאה</span></button></div>
+    </aside>
+    <main id="view"></main></div>`;
   $('#logout').onclick = async () => { await api('POST', '/logout').catch(() => {}); showLogin(); };
 }
 let META = null;
@@ -249,8 +326,9 @@ async function route() {
   const h = location.hash.replace(/^#\/?/, '');
   const [path, q = ''] = h.split('?');
   const parts = path.split('/');
-  $$('nav.tabs a').forEach((a) => a.classList.toggle('on', a.dataset.nav === (parts[0] === 'task' || !parts[0] ? 'tasks' : parts[0])));
+  $$('nav.menu a').forEach((a) => a.classList.toggle('on', a.dataset.nav === (parts[0] === 'task' || !parts[0] ? 'tasks' : parts[0])));
   if (!META) META = await api('GET', '/meta');
+  window.scrollTo(0, 0);
   try {
     if (parts[0] === 'task') await editor(parts[1] === 'new' ? null : Number(parts[1]), new URLSearchParams(q));
     else if (parts[0] === 'runs') await runsPage(new URLSearchParams(q));
@@ -263,56 +341,78 @@ async function route() {
 }
 window.addEventListener('hashchange', route);
 
-// ---------- רשימת משימות ----------
+// ---------- משימות (דף הבית) ----------
 async function tasksPage() {
-  const load = async () => {
-    const { tasks } = await api('GET', '/tasks');
-    $('#list').innerHTML = tasks.length ? tasks.map((t) => `
-      <div class="task" data-id="${t.id}">
-        <div>
-          <div class="row"><a class="name" href="#/task/${t.id}">${esc(t.name)}</a>${t.enabled ? '' : badge('מושבתת', 'b-gray')}${t.running ? badge('רצה עכשיו', 'b-run') : ''}</div>
-          <div class="meta"><span>${esc(t.description)}</span><span class="ltr mono">${esc(t.url)}</span>${t.rules ? `<span>${t.rules === 1 ? 'כלל אחד' : `${t.rules} כללים`}</span>` : ''}</div>
-          <div class="meta">
-            <span>הבאה: ${t.next ? `<b>${esc(t.next.day)} ${esc(nice(t.next.local))}</b> · ${esc(t.next.hebrew)} · ${rel(t.next.at)}` : '—'}</span>
-            <span>אחרונה: ${t.last_run_at ? `${resultBadge(t.last_status)} ${fmt(t.last_run_at)}${t.last_error ? ` · <span style="color:var(--bad)">${esc(t.last_error)}</span>` : ''}` : resultBadge(null)}</span>
-          </div>
-        </div>
-        <div class="row">
-          <button class="btn sm" data-a="run">הרץ עכשיו</button>
-          <a class="btn sm" href="#/task/${t.id}">עריכה</a>
-          <button class="btn sm" data-a="${t.enabled ? 'disable' : 'enable'}">${t.enabled ? 'השבתה' : 'הפעלה'}</button>
-          <a class="btn sm ghost" href="#/runs?task=${t.id}">יומן</a>
-          <button class="x" data-a="delete" title="מחיקה">✕</button>
-        </div>
-      </div>`).join('') : `<div class="empty">אין עדיין משימות.<br><br><a class="btn primary" href="#/task/new">יצירת משימה ראשונה</a></div>`;
+  let all = [];
+  let query = '';
+  $('#view').innerHTML = `<div class="head"><div><h1>משימות</h1><div class="sub">כל המשימות המתוזמנות במקום אחד</div></div>
+      <div class="row"><a class="btn" href="#/task/new?json=1">${ic('code')}הדבקת JSON</a><a class="btn primary" href="#/task/new">${ic('plus')}משימה חדשה</a></div></div>
+    <div class="stats" id="stats"></div>
+    <div class="card table-card"><div class="toolbar"><input type="text" id="q" placeholder="חיפוש משימה..."><span class="spacer"></span><span class="small muted" id="count"></span></div>
+      <div id="list"></div></div>`;
+  const renderStats = (st) => {
+    $('#stats').innerHTML = `
+      <div class="card stat"><div class="ic ic-blue">${ic('tasks')}</div><div><div class="v">${st.active}</div><div class="l">משימות פעילות מתוך ${st.total}</div></div></div>
+      <div class="card stat"><div class="ic ic-amber">${ic('clock')}</div><div><div class="v sm">${st.next ? `${esc(st.next.day)} ${esc(nice(st.next.local))}` : '—'}</div><div class="l">${st.next ? `הריצה הבאה · ${rel(st.next.at)}` : 'אין ריצות מתוכננות'}</div></div></div>
+      <div class="card stat"><div class="ic ic-green">${ic('check')}</div><div><div class="v">${st.ok7}</div><div class="l">הצליחו ב-7 ימים</div></div></div>
+      <div class="card stat"><div class="ic ic-red">${ic('alert')}</div><div><div class="v">${st.bad7}</div><div class="l">נכשלו ב-7 ימים</div></div></div>`;
   };
-  $('#view').innerHTML = `<div class="head"><h1>משימות</h1><div class="row">
-      <a class="btn" href="#/task/new?json=1">הדבקת JSON</a><a class="btn primary" href="#/task/new">משימה חדשה</a></div></div>
-    <div class="card" id="list"></div>`;
-  $('#list').onclick = async (e) => {
+  const renderList = () => {
+    const tasks = all.filter((t) => !query || `${t.name} ${t.description} ${t.url}`.toLowerCase().includes(query));
+    $('#count').textContent = all.length ? `${tasks.length} משימות` : '';
+    if (!all.length) {
+      $('#list').innerHTML = `<div class="empty"><div class="big">עדיין אין משימות</div>יוצרים משימה חדשה מתוך דוגמה מוכנה, או מדביקים JSON.<br><br><a class="btn primary" href="#/task/new">${ic('plus')}יצירת משימה ראשונה</a></div>`;
+      return;
+    }
+    $('#list').innerHTML = `<div class="tbl"><table class="tasks"><thead><tr><th>משימה</th><th>הריצה הבאה</th><th>תוצאה אחרונה</th><th>פעילה</th><th></th></tr></thead><tbody>
+      ${tasks.map((t) => `<tr data-id="${t.id}" class="${t.enabled ? '' : 'off'}">
+        <td class="name-cell"><a class="tname" href="#/task/${t.id}">${esc(t.name)}</a> ${t.running ? badge('רצה עכשיו', 'b-run') : ''}<div class="tsub">${esc(t.description)}</div></td>
+        <td>${t.next ? `<div>${esc(t.next.day)} ${esc(nice(t.next.local))}</div><div class="tsub">${esc(t.next.hebrew)} · ${rel(t.next.at)}</div>` : '<span class="faint">—</span>'}</td>
+        <td>${t.last_run_at ? `${resultBadge(t.last_status)}<div class="tsub">${fmt(t.last_run_at)}</div>${t.last_status === 'failure' && t.last_error ? `<div class="err" title="${esc(t.last_error)}">${esc(t.last_error)}</div>` : ''}` : resultBadge(null)}</td>
+        <td><label class="switch" title="${t.enabled ? 'להשבית' : 'להפעיל'}"><input type="checkbox" data-toggle ${t.enabled ? 'checked' : ''}><span></span></label></td>
+        <td class="actions-cell"><div class="actions">
+          <button class="btn sm" data-a="run">${ic('play')}הרצה</button>
+          <a class="icon-btn" href="#/task/${t.id}" title="עריכה">${ic('edit')}</a>
+          <a class="icon-btn" href="#/runs?task=${t.id}" title="יומן ריצות">${ic('list')}</a>
+          <button class="icon-btn danger" data-a="delete" title="מחיקה">${ic('trash')}</button></div></td>
+      </tr>`).join('') || '<tr><td colspan="5" class="empty">לא נמצאו משימות</td></tr>'}</tbody></table></div>`;
+  };
+  const load = async () => {
+    const [{ tasks }, st] = await Promise.all([api('GET', '/tasks'), api('GET', '/stats')]);
+    all = tasks;
+    renderStats(st);
+    renderList();
+  };
+  $('#q').oninput = (e) => { query = e.target.value.trim().toLowerCase(); renderList(); };
+  $('#list').addEventListener('change', async (e) => {
+    if (!e.target.matches('[data-toggle]')) return;
+    const id = e.target.closest('[data-id]').dataset.id;
+    try { await api('POST', `/tasks/${id}/${e.target.checked ? 'enable' : 'disable'}`); toast(e.target.checked ? 'המשימה הופעלה' : 'המשימה הושבתה', 'ok'); }
+    catch (err) { toast(err.message, 'bad'); }
+    await load();
+  });
+  $('#list').addEventListener('click', async (e) => {
     const b = e.target.closest('[data-a]');
     if (!b) return;
     const id = b.closest('[data-id]').dataset.id;
-    const a = b.dataset.a;
     try {
-      if (a === 'run') await runNow(id, b);
-      else if (a === 'delete') { if (!confirmDo('למחוק את המשימה ואת יומן הריצות שלה?')) return; await api('DELETE', `/tasks/${id}`); toast('נמחקה', 'ok'); }
-      else { await api('POST', `/tasks/${id}/${a}`); toast(a === 'enable' ? 'הופעלה' : 'הושבתה', 'ok'); }
+      if (b.dataset.a === 'run') await runNow(id, b);
+      else if (b.dataset.a === 'delete') { if (!confirmDo('למחוק את המשימה ואת יומן הריצות שלה?')) return; await api('DELETE', `/tasks/${id}`); toast('המשימה נמחקה', 'ok'); }
       await load();
     } catch (err) { toast(err.message, 'bad'); }
-  };
+  });
   await load();
-  timer = setInterval(() => !document.hidden && !$('.overlay') && load().catch(() => {}), 20000);
+  timer = setInterval(() => !document.hidden && !$('.overlay') && document.activeElement?.id !== 'q' && load().catch(() => {}), 30000);
 }
 
 async function runNow(id, btn) {
-  const t = btn?.textContent;
+  const t = btn?.innerHTML;
   if (btn) { btn.disabled = true; btn.textContent = 'רצה...'; }
   try {
     const { run } = await api('POST', `/tasks/${id}/run`);
     toast(run.status === 'success' ? `הצליח (${run.status_code})` : `נכשל: ${run.error}`, run.status === 'success' ? 'ok' : 'bad');
     showRun(run.id);
-  } finally { if (btn) { btn.disabled = false; btn.textContent = t; } }
+  } finally { if (btn) { btn.disabled = false; btn.innerHTML = t; } }
 }
 
 // ---------- עורך משימה ----------
@@ -378,7 +478,7 @@ async function editor(id, params) {
   let headerRows = Object.entries(cfg.request.headers || {}).map(([k, v]) => ({ k, v }));
 
   $('#view').innerHTML = `
-    <div class="head"><h1>${id ? 'עריכת משימה' : 'משימה חדשה'}</h1>
+    <div class="head"><div><a href="#/" class="small">→ חזרה למשימות</a><h1>${id ? 'עריכת משימה' : 'משימה חדשה'}</h1></div>
       <div class="seg"><button data-tab="form">הגדרה</button><button data-tab="json">JSON</button></div></div>
     <div class="editor">
       <div id="main"></div>
@@ -581,7 +681,8 @@ async function editor(id, params) {
     return `<div class="grid2"><div class="field"><label class="f">אל</label><input type="text" class="ltr" data-b="${p}.email.to" data-t="list" value="${esc(toList(rule.email.to))}" placeholder="a@x.com, b@x.com"></div>
         <div class="field"><label class="f">עותק (רשות)</label><input type="text" class="ltr" data-b="${p}.email.cc" data-t="list" value="${esc(toList(rule.email.cc))}"></div></div>
       <div class="field"><label class="f">נושא</label><input type="text" data-b="${p}.email.subject" value="${esc(rule.email.subject)}"></div>
-      <div class="field"><label class="f">תוכן</label><textarea rows="5" data-b="${p}.email.body">${esc(rule.email.body)}</textarea>${varChips()}</div>`;
+      <div class="field"><label class="f">תוכן</label><textarea rows="6" data-b="${p}.email.body">${esc(rule.email.body)}</textarea>${varChips()}</div>
+      <button class="btn sm" data-preview="${p.split('.')[1]}">${ic('mail')}תצוגה מקדימה של המייל</button>`;
   }
   function renderRules() {
     cfg.rules.forEach((r) => { r.if ||= []; r.email ||= { to: [], cc: [], subject: '', body: '' }; });
@@ -661,6 +762,15 @@ async function editor(id, params) {
   $('#main').addEventListener('click', async (e) => {
     const b = e.target.closest('button');
     if (!b || !$('#main').contains(b)) return;
+    if (b.dataset.preview !== undefined) {
+      syncRows();
+      try {
+        const r = await api('POST', '/email-preview', { name: cfg.name, rule: cfg.rules[Number(b.dataset.preview)] });
+        const ov = modal(`תצוגה מקדימה: ${esc(r.subject)}`, '<div class="help" style="margin:-6px 0 10px">עם נתוני דוגמה. התאריך והשעה יהיו של הריצה עצמה.</div><iframe class="mail" sandbox style="height:560px"></iframe>');
+        $('iframe', ov).srcdoc = r.html;
+      } catch (err) { toast(err.message, 'bad'); }
+      return;
+    }
     if (b.dataset.insert) {
       // מוסיף את המשתנה לשדה האחרון שנבחר בתוך אותו מייל (ברירת מחדל: התוכן)
       const box = b.closest('.rule');
@@ -763,7 +873,7 @@ async function editor(id, params) {
       const ov = modal('תוצאת הבדיקה', `
         <dl class="kv"><dt>תוצאה</dt><dd>${resultBadge(r.outcome)} ${r.error ? esc(r.error) : ''}</dd><dt>קוד תגובה</dt><dd>${r.status_code ?? '—'}</dd><dt>משך</dt><dd>${r.duration_ms} מ"ש</dd></dl>
         <h2 style="margin-top:16px">מיילים שהיו נשלחים (${r.emails.length})</h2>
-        ${r.emails.map((m, i) => `<div class="card" style="margin-bottom:10px;background:var(--soft)"><dl class="kv"><dt>כלל</dt><dd>${esc(m.rule)}</dd><dt>אל</dt><dd class="ltr" style="text-align:right">${esc(m.to.join(', '))}</dd>${m.cc.length ? `<dt>עותק</dt><dd class="ltr" style="text-align:right">${esc(m.cc.join(', '))}</dd>` : ''}<dt>נושא</dt><dd>${esc(m.subject)}</dd></dl><iframe class="mail" sandbox data-m="${i}" style="margin-top:8px"></iframe></div>`).join('') || '<div class="faint">אף כלל לא התקיים</div>'}
+        ${r.emails.map((m, i) => `<div class="card" style="margin-bottom:10px;background:var(--soft)"><dl class="kv"><dt>כלל</dt><dd>${esc(m.rule)}</dd><dt>אל</dt><dd class="ltr" style="text-align:right">${esc(m.to.join(', '))}</dd>${m.cc.length ? `<dt>עותק</dt><dd class="ltr" style="text-align:right">${esc(m.cc.join(', '))}</dd>` : ''}<dt>נושא</dt><dd>${esc(m.subject)}</dd></dl><iframe class="mail" sandbox data-m="${i}" style="margin-top:8px;height:480px"></iframe></div>`).join('') || '<div class="faint">אף כלל לא התקיים</div>'}
         <h2 style="margin-top:16px">התגובה</h2><pre class="box">${esc(r.response || '(ריק)')}</pre>`);
       $$('iframe[data-m]', ov).forEach((f) => (f.srcdoc = r.emails[f.dataset.m].html));
     } catch (err) {
@@ -782,12 +892,12 @@ async function runsPage(params) {
   const { tasks } = await api('GET', '/tasks');
   let taskId = params.get('task') || '';
   let lastId = null;
-  $('#view').innerHTML = `<div class="head"><h1>יומן ריצות</h1>
+  $('#view').innerHTML = `<div class="head"><div><h1>יומן ריצות</h1><div class="sub">כל ריצה, מה חזר ואילו מיילים נשלחו. נשמר 30 יום.</div></div>
       <select class="w-auto" id="f-task"><option value="">כל המשימות</option>${tasks.map((t) => `<option value="${t.id}" ${String(t.id) === taskId ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></div>
     <div class="card tbl"><table><thead><tr><th>זמן</th><th>משימה</th><th>תוצאה</th><th>קוד</th><th>משך</th><th>מיילים</th><th>הערה</th></tr></thead><tbody id="rb"></tbody></table>
     <div class="empty hidden" id="re">אין ריצות</div></div>
     <div style="text-align:center;margin-top:12px"><button class="btn hidden" id="more">עוד</button></div>
-    <div class="help" style="margin-top:10px">ריצות נשמרות 30 יום.</div>`;
+`;
   async function load(append) {
     const q = new URLSearchParams();
     if (taskId) q.set('task_id', taskId);
@@ -819,23 +929,35 @@ async function showRun(id) {
 // ---------- הגדרות מייל ----------
 async function settingsPage() {
   const s = await api('GET', '/settings');
-  $('#view').innerHTML = `<div class="head"><h1>הגדרות מייל</h1></div>
-    <div class="stack" style="max-width:640px">
-      <form class="card" id="sf"><h2>Resend</h2>
-        <div class="field"><label class="f">מפתח API</label><input type="password" id="s-key" class="ltr" autocomplete="off" placeholder="${s.has_key ? `מוגדר (${esc(s.key_hint)}) - השאר ריק כדי לא לשנות` : 're_...'}"></div>
-        <div class="field"><label class="f">כתובת שולח</label><input type="text" id="s-from" value="${esc(s.from_email)}" placeholder="מערכת <noreply@your-domain.com>"><div class="help">מדומיין שאומת ב-Resend</div></div>
-        <div class="field"><label class="f">כתובת למענה (רשות)</label><input type="text" id="s-reply" class="ltr" value="${esc(s.reply_to)}"></div>
-        <button class="btn primary">שמירה</button></form>
-      <div class="card"><h2>מייל בדיקה</h2><div class="row" style="flex-wrap:nowrap"><input type="email" id="t-to" class="ltr" placeholder="you@example.com"><button class="btn" id="t-send">שליחה</button></div></div>
+  $('#view').innerHTML = `<div class="head"><div><h1>הגדרות מייל</h1><div class="sub">המיילים נשלחים דרך Resend, בעיצוב אחיד</div></div></div>
+    <div class="editor">
+      <div class="stack">
+        <form class="card" id="sf"><h2>חשבון Resend</h2>
+          <div class="field"><label class="f">מפתח API</label><input type="password" id="s-key" class="ltr" autocomplete="off" placeholder="${s.has_key ? `מוגדר (${esc(s.key_hint)}) - השאר ריק כדי לא לשנות` : 're_...'}"></div>
+          <div class="field"><label class="f">כתובת שולח</label><input type="text" id="s-from" value="${esc(s.from_email)}" placeholder="מערכת <noreply@your-domain.com>"><div class="help">מדומיין שאומת ב-Resend. אפשר עם שם: <span class="ltr">שם &lt;address@domain&gt;</span></div></div>
+          <div class="field"><label class="f">כתובת למענה (רשות)</label><input type="text" id="s-reply" class="ltr" value="${esc(s.reply_to)}"></div>
+          <div class="field"><label class="f">שם שיופיע בתחתית המייל</label><input type="text" id="s-brand" value="${esc(s.brand_name || '')}" placeholder="מתזמן המשימות"><div class="help">למשל שם הארגון: "נשלח אוטומטית על ידי ..."</div></div>
+          <button class="btn primary">שמירה</button></form>
+        <div class="card"><h2>שליחת מייל בדיקה</h2><div class="row" style="flex-wrap:nowrap"><input type="email" id="t-to" class="ltr" placeholder="you@example.com"><button class="btn" id="t-send">${ic('mail')}שליחה</button></div>
+          <div class="help">נשלח מייל לדוגמה בעיצוב שמשמאל, כדי לוודא שההגדרות תקינות.</div></div>
+      </div>
+      <div class="card side" style="padding:14px"><h2 style="margin:4px 4px 10px">כך ייראה מייל</h2><iframe class="mail" id="pv" sandbox style="height:560px"></iframe></div>
     </div>`;
+  const preview = async () => {
+    const r = await api('POST', '/email-preview', { brand_name: $('#s-brand').value });
+    $('#pv').srcdoc = r.html;
+  };
+  let pt;
+  $('#s-brand').oninput = () => { clearTimeout(pt); pt = setTimeout(preview, 300); };
   $('#sf').onsubmit = async (e) => {
     e.preventDefault();
-    try { await api('PUT', '/settings', { resend_api_key: $('#s-key').value, from_email: $('#s-from').value, reply_to: $('#s-reply').value }); toast('נשמר', 'ok'); settingsPage(); }
+    try { await api('PUT', '/settings', { resend_api_key: $('#s-key').value, from_email: $('#s-from').value, reply_to: $('#s-reply').value, brand_name: $('#s-brand').value }); toast('ההגדרות נשמרו', 'ok'); settingsPage(); }
     catch (err) { toast(err.message, 'bad'); }
   };
   $('#t-send').onclick = async () => {
-    try { await api('POST', '/settings/test', { to: $('#t-to').value }); toast('נשלח', 'ok'); } catch (err) { toast(err.message, 'bad'); }
+    try { await api('POST', '/settings/test', { to: $('#t-to').value }); toast('מייל הבדיקה נשלח', 'ok'); } catch (err) { toast(err.message, 'bad'); }
   };
+  await preview();
 }
 
 // ---------- תיעוד ----------

@@ -2,8 +2,8 @@
 
 import { normalizeTask, makeResponse, evaluateResponse, matchingRules } from './task.js';
 import { nextRun } from './schedule.js';
-import { render } from './template.js';
-import { getMailSettings, sendEmail, textToHtml } from './email.js';
+import { render, whenText } from './template.js';
+import { getMailSettings, sendEmail, designedEmail, textToBlocks } from './email.js';
 
 const STALE_MS = 15 * 60_000; // ריצה שלא הסתיימה תוך 15 דקות נחשבת תקועה
 const RETENTION_MS = 30 * 86_400_000;
@@ -99,20 +99,28 @@ export async function performRequest(cfg, ctx, { retries = cfg.request.retries }
   return { resp, outcome: result.ok ? 'success' : 'failure', error: result.error, attempts, summary };
 }
 
-/** המיילים שצריך לשלוח לפי הכללים, עם התוכן הסופי */
-export function planEmails(cfg, ctx) {
+/**
+ * המיילים שצריך לשלוח לפי הכללים, עם התוכן הסופי.
+ * טקסט רגיל נכנס לתבנית מעוצבת; תוכן שנכתב ב-HTML נשלח כמו שהוא.
+ */
+export function planEmails(cfg, ctx, { brand = '' } = {}) {
   return matchingRules(cfg.rules, ctx.outcome, ctx.resp).map((rule) => {
     const addrs = (arr) => arr.flatMap((a) => render(a, ctx).split(/[,;]/)).map((a) => a.trim()).filter(Boolean);
     const subject = render(rule.email.subject, ctx);
     const text = render(rule.email.body, ctx);
-    return {
-      rule: rule.name,
-      to: addrs(rule.email.to),
-      cc: addrs(rule.email.cc),
-      subject,
-      text: rule.email.html ? undefined : text,
-      html: rule.email.html ? render(rule.email.body, ctx, { html: true }) : textToHtml(text),
-    };
+    const html = rule.email.html
+      ? render(rule.email.body, ctx, { html: true })
+      : designedEmail({
+          title: subject,
+          bodyHtml: textToBlocks(text),
+          outcome: rule.when === 'always' ? (ctx.outcome === 'success' ? 'success' : 'failure') : rule.when,
+          details: [
+            ['משימה', cfg.name],
+            ['מתי', whenText(ctx.now)],
+          ],
+          brand,
+        });
+    return { rule: rule.name, to: addrs(rule.email.to), cc: addrs(rule.email.cc), subject, text, html };
   });
 }
 
@@ -139,9 +147,9 @@ export async function executeTask(env, row, cfg, { trigger, token, scheduledFor 
   Object.assign(ctx, { resp: res.resp, outcome: res.outcome, error: res.error });
 
   const emails = [];
-  const planned = planEmails(cfg, ctx);
+  const settings = cfg.rules.length ? await getMailSettings(db) : {};
+  const planned = planEmails(cfg, ctx, { brand: settings.brand_name });
   if (planned.length) {
-    const settings = await getMailSettings(db);
     for (const [i, m] of planned.entries()) {
       const sent = await sendEmail(env, settings, m, `scheduler-run-${runId}-${i}`);
       emails.push({ rule: m.rule, to: m.to, cc: m.cc, subject: m.subject, ok: sent.ok, error: sent.error || null });
